@@ -1,0 +1,114 @@
+# Lista de livros do Project Gutenberg usados pelo pipeline.
+#
+# Como adicionar mais livros (sem mexer em código):
+#   1) Procure o livro em https://www.gutenberg.org/ebooks/ filtrando
+#      por idioma "Portuguese".
+#   2) O id é o número que aparece na URL do livro (ex.: 55752).
+#   3) Adicione uma entrada no bloco `train` abaixo. Não precisa rodar
+#      mais nada — `prepare_books.py` é idempotente; só baixa o que
+#      ainda não está em artifacts/train_books/.
+#
+# Mantenha o holdout disjunto do treino (não duplique título). Se trocar
+# o holdout, lembre que isso muda os números da Tabela 1 e Figura 1.
+#
+# Todos os IDs aqui foram verificados manualmente no catálogo do PG
+# em 2026-04-28. Veja PROJECT_NOTES.md para a história do bug do
+# o_cortico.txt (id 43011 era um livro infantil em inglês mal-rotulado).
+
+train:
+  # ---------- Machado de Assis (5 livros) ----------
+  - id: 55752
+    file: dom_casmurro.txt
+    author: Machado de Assis
+    title: Dom Casmurro
+  - id: 55682
+    file: quincas_borba.txt
+    author: Machado de Assis
+    title: Quincas Borba
+  - id: 53101
+    file: a_mao_e_a_luva.txt
+    author: Machado de Assis
+    title: A Mão e a Luva
+  - id: 67162
+    file: helena.txt
+    author: Machado de Assis
+    title: Helena
+  - id: 56737
+    file: esau_e_jaco.txt
+    author: Machado de Assis
+    title: Esaú e Jacó
+  - id: 55797
+    file: memorial_de_aires.txt
+    author: Machado de Assis
+    title: Memorial de Aires
+
+  # ---------- José de Alencar (5 livros) ----------
+  - id: 67740
+    file: iracema.txt
+    author: José de Alencar
+    title: Iracema
+  - id: 67724
+    file: o_guarany_vol1.txt
+    author: José de Alencar
+    title: O Guarany Vol. 1
+  - id: 67725
+    file: o_guarany_vol2.txt
+    author: José de Alencar
+    title: O Guarany Vol. 2
+  - id: 38496
+    file: ubirajara.txt
+    author: José de Alencar
+    title: Ubirajara
+  - id: 67831
+    file: a_pata_da_gazela.txt
+    author: José de Alencar
+    title: A Pata da Gazela
+
+  # ---------- Eça de Queirós (5 livros) ----------
+  - id: 16384
+    file: o_mandarim.txt
+    author: Eça de Queirós
+    title: O Mandarim
+  - id: 42942
+    file: o_primo_basilio.txt
+    author: Eça de Queirós
+    title: O Primo Basílio
+  - id: 40409
+    file: os_maias.txt
+    author: Eça de Queirós
+    title: Os Maias
+  - id: 17515
+    file: a_reliquia.txt
+    author: Eça de Queirós
+    title: A Relíquia
+  - id: 18220
+    file: a_cidade_e_as_serras.txt
+    author: Eça de Queirós
+    title: A Cidade e as Serras
+
+  # ---------- Camilo Castelo Branco (1 livro, realismo PT) ----------
+  - id: 16425
+    file: amor_de_perdicao.txt
+    author: Camilo Castelo Branco
+    title: Amor de Perdição
+
+  # ---------- Bernardo Guimarães (1 livro, abolicionismo BR) ----------
+  - id: 74475
+    file: a_escrava_isaura.txt
+    author: Bernardo Guimarães
+    title: A Escrava Isaura
+
+  # ---------- Raul Pompéia (1 livro, naturalismo BR) ----------
+  - id: 68541
+    file: o_atheneu.txt
+    author: Raul Pompéia
+    title: O Atheneu
+
+# Holdout — fica em artifacts/dev/pt_dev.txt. Disjunto do treino.
+# Atenção: agora há 5 outros Machado no treino, então a sobreposição de
+# autor está documentada em main.tex como Limitation conhecida.
+holdout:
+  id: 54829
+  file: pt_dev.txt
+  author: Machado de Assis
+  title: Memórias Póstumas de Brás Cubas

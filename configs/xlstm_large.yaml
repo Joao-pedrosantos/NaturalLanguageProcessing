@@ -1,0 +1,35 @@
+# xLSTM "large": ~12-25M params, alvo do treino na GPU do desktop.
+#
+# Comparado ao medium:
+#   emb:       256 -> 512   (2x)
+#   blocks:      6 -> 12    (2x)
+#   ctx:       256 -> 512   (2x)
+#   slstm_at:  [1] -> [1,6] (dois sLSTM, intercalados — paper recomenda
+#                            ao menos um sLSTM e mostra ganho extra com
+#                            mais um conforme escala)
+#   backend:   vanilla -> cuda  (RTX 5080 é sm_120, suporta CC>=8.0)
+#
+# Rode `python -m scripts.count_params --config configs/xlstm_large.yaml`
+# pra confirmar a contagem exata.
+
+vocab_size: 8000
+embedding_dim: 512
+num_blocks: 12
+context_length: 512
+slstm_at: [1, 6]
+
+mlstm_block:
+  mlstm:
+    conv1d_kernel_size: 4
+    qkv_proj_blocksize: 4
+    num_heads: 8
+
+slstm_block:
+  slstm:
+    backend: cuda
+    num_heads: 8
+    conv1d_kernel_size: 4
+    bias_init: powerlaw_blockdependent
+  feedforward:
+    proj_factor: 1.3
+    act_fn: gelu

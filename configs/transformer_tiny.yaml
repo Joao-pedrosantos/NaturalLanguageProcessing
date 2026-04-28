@@ -1,0 +1,18 @@
+# Transformer baseline mini, dimensionado pra ~1.46M params batendo com
+# xlstm_tiny.yaml. Comparação justa: mesmo vocab, mesma dim de embedding,
+# mesmo contexto, mesmo orçamento total.
+#
+# Contagem (aproximada):
+#   tok_emb:    4000 * 128 = 512_000
+#   pos_emb:     256 * 128 =  32_768
+#   2 blocos:           ~  396_544    (qkv + proj + 2 LNs + MLP 4x)
+#   ln_f + head:        ~  512_256
+#   total:                1_453_568   (~0.5% abaixo do xLSTM, ok)
+
+vocab_size: 8000
+embedding_dim: 128
+num_blocks: 2
+num_heads: 4
+context_length: 256
+mlp_expansion: 4
+dropout: 0.0

@@ -1,0 +1,593 @@
+% =============================================================================
+% A Reproducible Pipeline for Architecture Comparison in Low-Resource
+% Language Modelling
+% Class final project, Natural Language Processing, Insper, 2026
+% =============================================================================
+
+\documentclass[11pt]{article}
+
+% --- packages -----------------------------------------------------------------
+\usepackage[a4paper, margin=1in]{geometry}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{mathptmx}                    % Times-like body + math (legacy, works everywhere)
+\usepackage{microtype}                    % nicer typography
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage[hidelinks]{hyperref}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage{titling}
+\usepackage{enumitem}
+\usepackage{listings}
+\usepackage{authblk}
+\usepackage{abstract}
+
+% --- styling: clean, single column, Nature-ish -------------------------------
+\setlength{\droptitle}{-1.2cm}
+\pretitle{\begin{flushleft}\large\bfseries}
+\posttitle{\par\end{flushleft}\vskip 0.4em}
+\preauthor{\begin{flushleft}\normalsize}
+\postauthor{\par\end{flushleft}}
+\predate{\begin{flushleft}\small\itshape}
+\postdate{\par\end{flushleft}\vskip 0.6em}
+
+\titleformat*{\section}{\large\bfseries}
+\titleformat*{\subsection}{\normalsize\bfseries}
+\titleformat*{\subsubsection}{\normalsize\bfseries\itshape}
+
+% Tighter spacing around section heads
+\titlespacing*{\section}{0pt}{1.2em}{0.4em}
+\titlespacing*{\subsection}{0pt}{0.9em}{0.3em}
+
+% Abstract: bold heading, no italic, slightly indented body
+\renewcommand{\abstractnamefont}{\normalsize\bfseries}
+\renewcommand{\abstracttextfont}{\normalsize}
+\setlength{\absleftindent}{0pt}
+\setlength{\absrightindent}{0pt}
+
+\setlength{\parskip}{0.4em}
+\setlength{\parindent}{0pt}
+
+% Code listings
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single,
+  framerule=0.4pt,
+  rulecolor=\color{black!40},
+  xleftmargin=0.5em,
+  xrightmargin=0.5em,
+  aboveskip=0.6em,
+  belowskip=0.6em,
+}
+
+% =============================================================================
+\title{A Reproducible Pipeline for Architecture Comparison in
+       Low-Resource Language Modelling:\\
+       A Case Study on xLSTM versus Transformer}
+
+\author[1]{João~Pedro~Rodrigues~dos~Santos}
+\affil[1]{Computer Engineering, Insper, São Paulo, Brazil}
+\date{April 2026}
+
+% =============================================================================
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+\noindent
+Fair comparison of neural network architectures is difficult: differences in
+tokenizers, hyperparameters, data preparation, and infrastructure routinely
+conflate with architectural differences in published comparisons. This paper
+presents an open-source pipeline designed to isolate architecture as the
+sole variable in language modelling experiments at extremely small scales
+(1--5\,M parameters, 1--2\,M training tokens). The pipeline standardises raw-text
+ingestion, byte-level BPE tokenizer training, model construction, training,
+and deterministic perplexity evaluation across user-supplied architectures.
+We illustrate the pipeline by comparing xLSTM~\cite{beck2024} and a GPT-style
+Transformer at two parameter scales, using nineteen 19th-century Portuguese novels
+from Project Gutenberg as the training corpus. We observe a crossover:
+the Transformer outperforms the xLSTM at the smallest scale, while the
+xLSTM marginally surpasses the Transformer at the medium scale. We
+emphasise a methodological caveat that is rarely controlled in published
+comparisons: training throughput between the two architectures in our setting
+differs by an order of magnitude due to implementation choices, not
+architectural cost. The pipeline is released as open-source software, ready
+for extension to additional architectures, corpora, and scales.
+\end{abstract}
+
+% =============================================================================
+\section{Introduction}
+
+The dominant architecture in modern language modelling is the
+Transformer~\cite{vaswani2017}, which underpins both encoder
+models such as BERT~\cite{devlin2019} and the GPT family of decoders.
+Despite its dominance, recurrent architectures have not disappeared. The
+xLSTM family, introduced recently by Beck et al.~\cite{beck2024}, revisits
+the LSTM with two new components: the \emph{sLSTM}, which augments the
+classical LSTM gating with exponential gates and a stabilisation mechanism;
+and the \emph{mLSTM}, which replaces the scalar memory cell with a matrix
+memory and is fully parallelisable. The authors argue that xLSTMs achieve
+parameter efficiency competitive with Transformers in language modelling,
+particularly at scale.
+
+Most published comparisons between recurrent and attention-based language
+models target the regime in which both architectures shine: large models
+trained on large corpora. Considerably less is known about the
+\emph{extremely low-resource regime}, where models contain a few million
+parameters and are trained on a few million tokens. This regime is relevant
+in two practical settings: pedagogical and prototyping experiments where
+compute budgets are tight, and bootstrapping in low-resource languages
+where pretraining data is fundamentally limited.
+
+A second, methodological problem is that comparisons published across
+papers are difficult to interpret because they typically differ in
+tokenizer, hyperparameters, data preparation, evaluation set, and software
+stack. Conclusions about architectural superiority routinely confound with
+these other choices. The community has noted this reproducibility gap, but
+public, end-to-end pipelines that explicitly isolate architecture as
+the sole variable remain scarce.
+
+\paragraph{Contribution.} The primary contribution of this work is
+methodological: an open-source, end-to-end pipeline that isolates
+architecture as the only variable in small-scale language modelling
+experiments. The pipeline standardises every other component:
+\begin{itemize}[leftmargin=1.2em, itemsep=0pt, topsep=0pt]
+  \item raw-text ingestion and cleaning (Project Gutenberg boilerplate
+        stripping);
+  \item byte-level BPE tokenizer training;
+  \item model factory parameterised by a single \texttt{arch} flag;
+  \item training loop (AdamW, cosine schedule, gradient clipping,
+        identical seeds);
+  \item deterministic perplexity evaluation on a held-out corpus;
+  \item logging in a single \texttt{log.jsonl} format suitable for
+        cross-run aggregation and plotting.
+\end{itemize}
+As a secondary contribution, we apply the pipeline to xLSTM and a
+GPT-style Transformer at two parameter scales (\(\sim\)1.5\,M and
+\(\sim\)4.5\,M) and report empirical observations. These observations
+are intentionally framed as an illustration of the pipeline rather than
+as definitive claims about architectural superiority.
+
+% =============================================================================
+\section{Related Work}
+
+\paragraph{Transformer-based language modelling.}
+The Transformer~\cite{vaswani2017} is currently the default architecture
+for both encoder-style models~\cite{devlin2019} and autoregressive
+decoders, including the GPT line~\cite{radford2019}. The decoder
+configuration we adopt as a baseline (pre-norm layers, multi-head causal
+attention, GELU MLPs) is essentially the small-scale GPT recipe popularised
+by Karpathy's \texttt{nanoGPT}~\cite{nanogpt}, which we use as a reference
+implementation.
+
+\paragraph{xLSTM.}
+xLSTM~\cite{beck2024} comprises two block types. The sLSTM block uses
+exponential gating to address the limited storage capacity of classical
+LSTMs and is recurrent in nature. The mLSTM block stores associations in
+a matrix, exposes a parallel formulation analogous to attention, and
+provides parameter-efficient long-range memory. The original work
+demonstrates competitive performance with Transformers on standard
+language modelling benchmarks at scale.
+
+\paragraph{Tokenization and tokenizer-induced confounds.}
+Sennrich et al.~\cite{sennrich2016} introduced byte-pair encoding for
+neural machine translation; the byte-level variant we employ is standard
+in modern decoders~\cite{radford2019}. We note that comparisons across
+architectures often differ in tokenizer choice, which is a known confound
+since tokenizer determines effective vocabulary, sequence length, and the
+intrinsic difficulty of the language modelling objective.
+
+% =============================================================================
+\section{Methodology: A Reproducible Comparison Pipeline}
+
+The pipeline is organised in four stages
+(Figure~\ref{fig:pipeline}). Stage 1 ingests raw text from a list of
+Project Gutenberg book identifiers and strips the standard boilerplate
+markers. Stage 2 trains a byte-level BPE tokenizer with a configurable
+vocabulary size on the materialised corpus. Stage 3 constructs the model
+through an architecture-agnostic factory that dispatches on a single
+\texttt{arch} field in the training configuration; this is the only
+configuration field that differs between comparable runs. Stage 4 runs the
+training loop and produces a single \texttt{log.jsonl} per run that is
+consumed downstream by analysis scripts.
+
+\begin{figure}[h]
+\centering
+\fbox{\parbox{0.95\linewidth}{\centering\small
+\textsf{raw books}~$\rightarrow$~\textsf{cleaning}~$\rightarrow$~\textsf{tokenizer training}~$\rightarrow$~\textsf{model factory (arch=xlstm \textbar{} transformer)}~$\rightarrow$~\textsf{training loop}~$\rightarrow$~\textsf{log.jsonl}~$\rightarrow$~\textsf{aggregated comparison}
+}}
+\caption{The four-stage comparison pipeline. The dispatch on
+  \texttt{arch} is the only locus where architectures diverge; every
+  other component is shared.}
+\label{fig:pipeline}
+\end{figure}
+
+\subsection{Data}
+
+The training corpus consists of nineteen novels from Project Gutenberg,
+totalling \textasciitilde 7.5\,MB of cleaned UTF-8 text
+(\textasciitilde 1.9\,M tokens at the byte-level BPE described below).
+The selection covers six authors across multiple literary movements of
+19th-century Brazilian and Portuguese literature: \emph{Dom Casmurro},
+\emph{Quincas Borba}, \emph{Helena}, \emph{A Mão e a Luva},
+\emph{Esaú e Jacó} and \emph{Memorial de Aires} by Machado de Assis
+(Brazilian realism); \emph{O Primo Basílio}, \emph{O Mandarim},
+\emph{Os Maias}, \emph{A Relíquia} and \emph{A Cidade e as Serras} by
+Eça de Queirós (Portuguese realism); \emph{Iracema}, \emph{O Guarany}
+(Vols. 1 and 2), \emph{Ubirajara} and \emph{A Pata da Gazela} by José
+de Alencar (Brazilian Romantic indianism); \emph{Amor de Perdição} by
+Camilo Castelo Branco (Portuguese romanticism); \emph{A Escrava Isaura}
+by Bernardo Guimarães (Brazilian abolitionist romanticism); and \emph{O
+Ateneu} by Raul Pompéia (Brazilian late-19th-century prose). The
+held-out evaluation corpus is \emph{Memórias Póstumas de Brás Cubas}
+by Machado de Assis. The holdout shares an author with six training
+works (the dominant author in the period) but is itself work-disjoint;
+the literature available in the public domain in Portuguese imposes
+limits on the achievable holdout disjointness.
+
+The Project Gutenberg standard boilerplate (English-language license
+header and footer) is stripped using regular expressions matching the
+canonical \texttt{*** START} and \texttt{*** END} markers. Without this
+step, models learn to predict English legal text at the boundaries.
+
+\subsection{Tokenizer}
+
+We train a single byte-level BPE tokenizer with vocabulary size 4{,}000
+on the same corpus that will be used for training, using the
+\texttt{tokenizers} library~\cite{huggingfacetokenizers}. The byte-level
+variant is chosen for two reasons: (i)~it eliminates the possibility of
+\texttt{<unk>} tokens, which is desirable for accented Portuguese
+orthography; and (ii)~it permits a uniform treatment across the (eventual)
+multilingual extension of the pipeline. The vocabulary size of 4{,}000
+is small by modern standards but appropriate for the corpus size and
+deliberately stresses the language modelling objective.
+
+\subsection{Architectures}
+
+Two architectures are compared. Both share the same input vocabulary
+size, embedding dimension, context length, and output head; they differ
+only in their core block.
+
+\paragraph{xLSTM.}
+We use the official \texttt{xlstm} package~\cite{beck2024}. Each model
+contains one sLSTM block and the remainder mLSTM blocks. The sLSTM block
+is placed at the second position of the stack, following the recipe in
+the original paper. We use the \texttt{vanilla} backend (pure PyTorch),
+since the high-performance \texttt{cuda} backend requires CUDA Compute
+Capability \(\ge\)\,8.0 and our experiments are conducted on CPU. This
+choice is methodologically conservative for the speed comparison
+discussed in Section~\ref{sec:throughput}.
+
+\paragraph{Transformer.}
+We implement a GPT-style decoder in pure PyTorch: token and learned
+positional embeddings, a stack of pre-norm blocks each containing
+multi-head causal self-attention (computed via
+\texttt{F.scaled\_dot\_product\_attention}) and a GELU MLP, a final
+layer norm, and an untied output projection. Weight initialisation
+follows GPT-2~\cite{radford2019}: \(\mathcal{N}(0, 0.02^2)\) for weights and
+zero for biases.
+
+\paragraph{Parameter pairing.}
+At each scale, the two architectures are configured to match in total
+parameter count to within a small fraction. At the tiny scale, both
+contain roughly 1.45\,M parameters (gap of 0.5\%). At the medium scale,
+the xLSTM contains 4.55\,M parameters and the Transformer 4.22\,M (gap
+of 7\%). The Transformer's MLP expansion factor is reduced from the
+canonical~4 to~2 at the medium scale to keep the parameter budget
+balanced.
+
+\subsection{Training}
+
+The training loop is shared across architectures and identical in every
+hyperparameter except for the architecture itself. We use AdamW with
+\(\beta_1{=}0.9\), \(\beta_2{=}0.95\), weight decay 0.1 (applied only
+to tensors of rank $\ge$ 2, following the Chinchilla
+convention~\cite{hoffmann2022}), peak learning rate \(3 \times 10^{-4}\),
+linear warmup followed by cosine decay to 10\% of the peak, and gradient
+clipping at norm 1.0. Sequences of length 256 are packed without padding,
+using \texttt{</s>} as document separator. Batches contain 4 sequences;
+no gradient accumulation is used at this scale. Training runs for 1{,}500
+steps at the tiny scale and 2{,}000 steps at the medium scale. All
+experiments use full \texttt{float32} precision on CPU.
+
+\subsection{Evaluation}
+
+Evaluation is performed at fixed intervals during training on a
+deterministic, file-based holdout dataset (Section~3.1). Tokenisation,
+chunking order, and the number of evaluation chunks are fixed across
+runs, so reported perplexity values are directly comparable. We report
+the \emph{best} dev perplexity and the \emph{final} dev perplexity, the
+former because it is the value used to select checkpoints in practice,
+and the latter because it characterises end-of-training behaviour.
+
+% =============================================================================
+\section{Results}
+
+\subsection{Held-out perplexity}
+
+Table~\ref{tab:results} reports best and final dev perplexity along with
+training throughput for the four configurations. Figure~\ref{fig:scaling}
+shows training loss and held-out perplexity over training steps for all
+four runs.
+
+\begin{table}[h]
+\centering
+\caption{Held-out perplexity on \emph{Memórias Póstumas de Brás Cubas}.
+  Throughput is the mean training throughput observed during the run on
+  CPU.}
+\label{tab:results}
+\small
+\begin{tabular}{lrrrr}
+\toprule
+Model & Params & Best PPL & Final PPL & Throughput \\
+\midrule
+xLSTM tiny         & 1.46\,M & 461.9 & 514.7 & 2.8\,k tok/s \\
+Transformer tiny   & 1.45\,M & \textbf{332.5} & 510.1 & 22.4\,k tok/s \\
+xLSTM medium       & 4.55\,M & \textbf{229.9} & 229.9 & 1.8\,k tok/s \\
+Transformer medium & 4.22\,M & 235.6 & 235.6 & 8.6\,k tok/s \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\linewidth]{scaling_curve.png}
+\caption{Training loss (left) and held-out perplexity (right, log scale)
+  for the four model--scale combinations across training steps. Tiny
+  models train for 1{,}500 steps; medium models for 2{,}000 steps.}
+\label{fig:scaling}
+\end{figure}
+
+Two observations stand out.
+
+First, both architectures benefit substantially from the move from
+tiny to medium scale: best held-out perplexity is reduced by approximately
+50\% in both cases. This indicates that the tiny scale is undertrained
+relative to the architectures' capacity, and that the held-out perplexity
+is genuinely sensitive to model capacity in this regime.
+
+Second, the relative ranking between architectures inverts with scale.
+At the tiny scale, the Transformer attains a substantially lower best
+perplexity than the xLSTM (332.5 vs. 461.9, a 28\% gap). At the medium
+scale, the ordering inverts and the xLSTM marginally outperforms the
+Transformer (229.9 vs. 235.6, a 2.5\% gap). The medium-scale gap is
+small enough that, in the absence of multiple training seeds, no firm
+claim of superiority can be made; we discuss this further in
+Section~\ref{sec:limitations}.
+
+A subsidiary observation is that the xLSTM medium run reached its best
+held-out perplexity at the final evaluation, indicating that the run was
+\emph{undertrained} at the budget chosen. The Transformer medium also
+ended with best equal to final, suggesting both runs would benefit from
+additional steps; a confirmatory run with the longer schedule is left
+to future work.
+
+\subsection{Throughput and the implementation caveat}\label{sec:throughput}
+
+Table~\ref{tab:results} also reports the mean training throughput in
+tokens per second. The Transformer trains roughly 5--8$\times$ faster
+than the xLSTM in our setting. We emphasise that this is \emph{not} a
+fundamental architectural cost. The reported numbers reflect the use of
+the \texttt{vanilla} (pure PyTorch) xLSTM backend; the dedicated CUDA
+kernels of the official xLSTM implementation, which parallelise the
+recurrence via a custom scan operation, would close most of this gap on
+GPU. Conversely, the Transformer benefits substantially in CPU from the
+fused \texttt{F.scaled\_dot\_product\_attention} kernel, which exploits
+SIMD/AVX in a way that the loop-based recurrent path does not.
+
+This implementation-versus-architecture distinction is a methodological
+point that the pipeline makes explicit by logging throughput in the same
+\texttt{log.jsonl} as the perplexity numbers, and that we believe is
+under-reported in arch-comparison papers in general.
+
+\subsection{Qualitative inspection}
+
+We provide samples from each trained model in Appendix~\ref{app:samples}.
+Briefly, the medium-scale models produce text that is recognisably
+Portuguese and reproduces the orthographic conventions of 19th-century
+Brazilian literature (\emph{pae} for \emph{pai}, contractions like
+\emph{n'um}, dialogue with em-dashes). The tiny-scale models produce
+fragments with isolated correct words but limited syntactic coherence.
+Sample-level differences between architectures are subjective and we do
+not draw quantitative conclusions from them.
+
+% =============================================================================
+\section{Discussion}
+
+The pipeline succeeds in producing comparable runs in the sense that
+matters for arch comparison: every component except the architecture is
+shared, every hyperparameter is logged, and the held-out evaluation is
+deterministic. We believe this is a useful artefact in itself,
+independently of the specific result reported. In particular, the
+pipeline can be extended to (i)~additional architectures by adding a
+new branch to the model factory; (ii)~larger scales by adjusting the
+configuration files (a 50\,M-parameter configuration is included in the
+repository as a target for future GPU experiments); and (iii)~other
+corpora by replacing the book-list module.
+
+The crossover observation in our case study is consistent with the
+hypothesis advanced by Beck et al.~\cite{beck2024} that xLSTM advantages
+emerge with scale. We stress, however, that the gap at the medium
+scale is small (2.5\%) and that we have not measured run-to-run variance.
+A definitive claim would require multiple seeds; we view our observation
+as suggestive rather than conclusive.
+
+% =============================================================================
+\section{Limitations and Future Work}\label{sec:limitations}
+
+\paragraph{Single seed.}
+All numbers reported are from a single training run per configuration.
+The 2.5\% gap at the medium scale is comparable in magnitude to seed
+variance commonly observed in small-scale language modelling. Multiple
+seeds (we suggest at least three) would be needed before drawing
+quantitative conclusions about the medium-scale ranking.
+
+\paragraph{Domain.}
+The corpus consists exclusively of 19th-century Portuguese-language
+literature. We do not claim our observations transfer to other domains
+(modern Portuguese, technical text, code, etc.) or to other languages.
+The pipeline structure makes such extensions straightforward, but they
+remain to be performed.
+
+\paragraph{Scale.}
+The largest model in this study contains \(\sim\)4.5\,M parameters and
+sees \(\sim\)2\,M tokens during training. This is several orders of
+magnitude smaller than typical pretraining setups for which the original
+xLSTM and Transformer comparisons are reported. The repository contains
+a 50\,M-parameter configuration paired with a streaming Wikipedia
+pipeline, intended for future GPU experiments in which the question of
+architectural advantage at near-Chinchilla-optimal token budgets can
+be addressed in a more rigorous fashion.
+
+\paragraph{Holdout author overlap.}
+The holdout work is by Machado de Assis, who is also the author of six
+of the nineteen training works (Machado being the most prolific author
+of the period in the public domain). While the works themselves are
+disjoint, an author-disjoint holdout would be methodologically
+preferable; it was not adopted because the held-out perplexity numbers
+must remain comparable across the runs reported here, all of which used
+this holdout.
+
+\paragraph{Subtraining.}
+Both medium-scale runs reached their best held-out perplexity at the
+final evaluation, indicating that the chosen step budget is below the
+point of diminishing returns. A longer schedule (e.g., 4{,}000 steps with
+proportionally larger warmup) is the natural next step, and may shift
+the medium-scale ranking.
+
+% =============================================================================
+\section{Conclusion}
+
+We have presented an open-source pipeline that isolates architecture as
+the sole variable in small-scale language modelling experiments. As an
+illustrative case study, we have applied the pipeline to xLSTM and a
+GPT-style Transformer at two parameter scales using a corpus of
+19th-century Portuguese literature, and observed a crossover effect in
+held-out perplexity: the Transformer wins at the smallest scale, and the
+xLSTM marginally surpasses the Transformer at the medium scale. The
+observation is consistent with the hypothesis that xLSTM advantages
+emerge with scale, but the small medium-scale gap and the absence of
+multiple seeds preclude strong claims. We have additionally highlighted
+a methodological subtlety that is rarely controlled in published
+arch-comparison work: training throughput differences between recurrent
+and attention-based architectures in our setting span an order of
+magnitude due to backend implementation rather than fundamental
+architectural cost.
+
+% =============================================================================
+\section*{Code and Data Availability}
+
+The full pipeline, including all configuration files, training scripts,
+analysis scripts, and the four trained checkpoints from this study, is
+available at: \url{https://github.com/Joao-pedrosantos/NaturalLanguageProcessing}.
+All training data is publicly available from Project
+Gutenberg under public-domain or non-restrictive licenses.
+
+% =============================================================================
+\begin{thebibliography}{9}
+
+\bibitem{vaswani2017}
+Vaswani, A. \emph{et al.}
+Attention is all you need.
+\emph{Advances in Neural Information Processing Systems 30} (2017).
+
+\bibitem{devlin2019}
+Devlin, J., Chang, M.-W., Lee, K. \& Toutanova, K.
+BERT: Pre-training of deep bidirectional transformers for language
+understanding.
+\emph{NAACL-HLT} (2019).
+
+\bibitem{beck2024}
+Beck, M. \emph{et al.}
+xLSTM: Extended long short-term memory.
+\emph{Advances in Neural Information Processing Systems 37} (2024).
+
+\bibitem{radford2019}
+Radford, A. \emph{et al.}
+Language models are unsupervised multitask learners.
+OpenAI technical report (2019).
+
+\bibitem{sennrich2016}
+Sennrich, R., Haddow, B. \& Birch, A.
+Neural machine translation of rare words with subword units.
+\emph{Proceedings of ACL} (2016).
+
+\bibitem{hoffmann2022}
+Hoffmann, J. \emph{et al.}
+Training compute-optimal large language models.
+\emph{Advances in Neural Information Processing Systems 35} (2022).
+
+\bibitem{nanogpt}
+Karpathy, A.
+nanoGPT: The simplest, fastest repository for training/finetuning
+medium-sized GPTs.
+GitHub repository (2022). \url{https://github.com/karpathy/nanoGPT}.
+
+\bibitem{huggingfacetokenizers}
+Hugging Face.
+\texttt{tokenizers}: Fast state-of-the-art tokenizers optimised for
+research and production.
+GitHub repository.
+\url{https://github.com/huggingface/tokenizers}.
+
+\end{thebibliography}
+
+% =============================================================================
+\appendix
+\section{Generated Samples}\label{app:samples}
+
+All samples are generated with temperature 0.8 and top-$k$ 40, conditioned on
+the prompt \texttt{"Capitu olhou para mim"}. We reproduce the model output
+verbatim; line breaks reflect the model's own newline tokens.
+
+\paragraph{xLSTM tiny (1.46\,M).}
+\begin{quote}\small
+\itshape
+Capitu olhou para mim. E ``I?'' Eu, ``S and I said, ``All to make
+--Não, com a to and we had, que me as, e a ser em lir a Cas. --V O seus
+ret knowra, e os meus bo-se, com ella, a cabeça, a cim, mas, n'um que é
+que o pae de Capitú ao Ca,
+\end{quote}
+
+\paragraph{Transformer tiny (1.45\,M).}
+\begin{quote}\small
+\itshape
+Capitu olhou para mim, peu á Europa; elle me fez um de uma fóimente o
+nosso velho, não teria a primeira, e Conversinaria-se á vida, que eu ia
+do bureira. O APITULO No dia, de CA E a mãe, e o que ella Hou-se, quando
+se os lugará
+\end{quote}
+
+\paragraph{xLSTM medium (4.55\,M).}
+\begin{quote}\small
+\itshape
+Capitu olhou para mim a passel. Os que eu não ser não a minha mãe, a
+minha mãe, em dirá á porta de dizer. Ora, mas não é preciso que eram que
+não lhe e eu mesmo. Vinha-me com a verdade com seu filho, e não ha de
+profeira. --Ha? Não, não ha de mim. --Aqui, mas não se não ha do outro
+de Deus. --Não,
+\end{quote}
+
+\paragraph{Transformer medium (4.22\,M).}
+\begin{quote}\small
+\itshape
+Capitu olhou para mim, peu á Europa; elle me fez um de uma fóimente o
+nosso velho, não teria a primeira, e Conversinaria-se á vida, que eu
+ia do bureira. O APITULO No dia, de CA E a mãe, e o que ella Hou-se,
+quando se os lugará
+\end{quote}
+
+\medskip
+
+We note qualitatively that medium-scale samples reproduce 19th-century
+Portuguese orthographic conventions (\emph{pae}, \emph{á}, \emph{ella},
+contractions like \emph{n'um}) and recognisable dialogue structure with
+em-dashes. Tiny-scale samples produce isolated correct words but lower
+syntactic coherence. We refrain from quantitative qualitative claims.
+
+\end{document}

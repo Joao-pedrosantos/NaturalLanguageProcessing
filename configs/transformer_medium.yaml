@@ -1,0 +1,24 @@
+# Transformer "medium" pareado com xlstm_medium.
+#
+# Estimativa:
+#   tok_emb:    4000 * 256 = 1_024_000
+#   pos_emb:     256 * 256 =    65_536
+#   4 blocos com mlp_expansion=2:
+#     ln1+ln2:   2 * 2*256 =     1_024
+#     qkv:       256*768 + 768 =   197k
+#     proj:      256*256 + 256 =    66k
+#     fc1:       256*512 + 512 =   132k
+#     fc2:       512*256 + 256 =   131k
+#     block:                       527k
+#   4 blocks:                    2_108k
+#   ln_f:                            512
+#   head:                       1_024k
+#   total:                      ~4_222k
+
+vocab_size: 8000
+embedding_dim: 256
+num_blocks: 4
+num_heads: 8
+context_length: 256
+mlp_expansion: 2   # menor que o padrão 4 pra bater params com xLSTM medium
+dropout: 0.0

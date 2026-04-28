@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "xlstm-ptbr-en"
+version = "0.1.0"
+description = "xLSTM pre-training on multilingual PT+EN Wikipedia"
+requires-python = ">=3.10"
+dependencies = [
+    "torch>=2.1",
+    "datasets>=2.18",
+    "tokenizers>=0.15",
+    "numpy",
+    "tqdm",
+    "omegaconf",
+    "dacite",
+    "xlstm>=1.0",
+    "mlstm_kernels",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]

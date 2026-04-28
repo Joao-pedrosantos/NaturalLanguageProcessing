@@ -1,0 +1,30 @@
+# Dependências para xlstm-ptbr-en
+#
+# Instalação:
+#   pip install -r requirements.txt
+#
+# Notas:
+# - PyTorch >= 2.1 é requisito do pacote xlstm.
+# - Na RTX 5080 (Blackwell, sm_120), instale o PyTorch nightly com CUDA 12.8:
+#     pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu128
+#   e remova a linha "torch>=2.1" abaixo antes de rodar este arquivo.
+# - mlstm_kernels só é necessário para o backend "cuda" do sLSTM. Se a
+#   compilação falhar e você for usar backend "vanilla" (POC em notebook),
+#   comente a linha mlstm_kernels.
+
+# Core
+torch>=2.1
+numpy>=1.24
+
+# Dados e tokenização
+datasets>=2.18
+tokenizers>=0.15
+tqdm>=4.65
+
+# Configs
+omegaconf>=2.3
+dacite>=1.8
+
+# Modelo
+xlstm>=1.0
+mlstm_kernels>=0.1

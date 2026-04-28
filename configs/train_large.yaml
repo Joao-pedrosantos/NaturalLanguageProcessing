@@ -1,0 +1,47 @@
+# Treino xLSTM large na GPU. Sai do regime undertrained do medium:
+# 12k steps + 1k warmup + cosine até 10% deixa o modelo treinar até
+# o eval claramente platô.
+#
+# Premissas:
+#   - GPU >= 12GB VRAM (RTX 5080 dá conta de batch 32 / ctx 512 em bf16)
+#   - PyTorch nightly com CUDA 12.8 instalado (driver >= 560)
+#   - xlstm cuda backend funcionando (ver xlstm_large.yaml)
+
+arch: xlstm
+model_config: configs/xlstm_large.yaml
+tokenizer: artifacts/tokenizer.json
+out_dir: runs/xlstm_large
+
+# Data
+seq_len: 512
+alpha: 0.7
+shuffle_buffer: 200
+
+# Optim
+learning_rate: 6.0e-4
+min_lr_ratio: 0.1
+weight_decay: 0.1
+betas: [0.9, 0.95]
+grad_clip: 1.0
+
+# Schedule
+warmup_steps: 1000
+total_steps: 12000
+
+# Batch
+batch_size: 32
+grad_accum_steps: 1
+num_workers: 4
+
+# Logging
+log_every: 50
+eval_every: 500
+eval_max_batches: 16
+save_every: 1000
+keep_last_ckpts: 2
+
+# Precisão
+dtype: bfloat16
+compile: false   # xlstm cuda backend não casa bem com torch.compile
+
+seed: 42

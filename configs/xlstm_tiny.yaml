@@ -1,0 +1,33 @@
+# Configuração mini de xLSTM para prova de conceito em notebook.
+#
+# Comparação com xlstm_50m.yaml:
+#   vocab:    32k -> 4k       (~8x menos)
+#   emb_dim:  512 -> 128      (~4x menos)
+#   blocks:    12 -> 4        (3x menos)
+#   context: 1024 -> 256      (4x menos)
+#
+# Resultado: ~1-2M parâmetros. Roda em CPU/iGPU.
+
+vocab_size: 8000
+embedding_dim: 128
+num_blocks: 4
+context_length: 256
+slstm_at: [1]
+
+mlstm_block:
+  mlstm:
+    conv1d_kernel_size: 4
+    qkv_proj_blocksize: 4
+    num_heads: 4
+
+slstm_block:
+  slstm:
+    # GPU desktop: backend "cuda" exige CC>=8.0 (RTX 5080 é sm_120, ok).
+    # Em CPU/notebook, troque para "vanilla".
+    backend: cuda
+    num_heads: 4
+    conv1d_kernel_size: 4
+    bias_init: powerlaw_blockdependent
+  feedforward:
+    proj_factor: 1.3
+    act_fn: gelu

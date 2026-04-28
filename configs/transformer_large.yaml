@@ -1,0 +1,22 @@
+# Transformer "large" pareado com xlstm_large.
+#
+# Comparado ao medium:
+#   emb:           256 -> 512  (2x)
+#   blocks:          4 ->  8   (2x)
+#   ctx:           256 -> 512  (2x)
+#   mlp_expansion:   2 ->  4   (volta ao padrão GPT)
+#
+# Estimativa rápida (rode count_params pra confirmar):
+#   tok_emb:                                  4000 * 512 =     2.0M
+#   pos_emb:                                   512 *  512 =    0.26M
+#   8 blocks * (~3.1M cada com expansion=4)   ~24.8M
+#   head:                                     ~2.0M
+#   total:                                    ~29M
+
+vocab_size: 8000
+embedding_dim: 512
+num_blocks: 8
+num_heads: 8
+context_length: 512
+mlp_expansion: 4
+dropout: 0.0

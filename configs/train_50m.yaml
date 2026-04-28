@@ -1,0 +1,45 @@
+# Training hyperparameters for the 50M xLSTM on PT+EN Wikipedia.
+#
+# Token budget reasoning:
+#   batch_size * grad_accum * seq_len = tokens per step
+#   16 * 2 * 1024 = 32_768 tokens/step
+#   30_000 steps ≈ 983M tokens ≈ Chinchilla-optimal for 50M params.
+
+model_config: configs/xlstm_50m.yaml
+tokenizer: artifacts/tokenizer.json
+out_dir: runs/xlstm_50m
+
+# Data
+seq_len: 1024
+alpha: 0.7              # language mixing temperature
+shuffle_buffer: 10000
+
+# Optim
+learning_rate: 3.0e-4
+min_lr_ratio: 0.1       # min_lr = 0.1 * learning_rate at end of cosine
+weight_decay: 0.1
+betas: [0.9, 0.95]
+grad_clip: 1.0
+
+# Schedule (measured in optimizer steps, not micro-batches)
+warmup_steps: 1000
+total_steps: 30000
+
+# Batch
+batch_size: 16
+grad_accum_steps: 2     # effective batch = 32 sequences
+num_workers: 2
+
+# Logging / eval / checkpointing
+log_every: 50
+eval_every: 1000
+eval_max_batches: 100   # cap eval length for speed
+save_every: 2000
+keep_last_ckpts: 3
+
+# Precision
+dtype: bfloat16         # RTX 5080 (Blackwell) handles bf16 natively
+compile: false          # torch.compile + xLSTM CUDA kernels is finicky
+
+# Reproducibility
+seed: 42

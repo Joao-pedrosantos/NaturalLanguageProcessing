@@ -1,0 +1,37 @@
+# xLSTM LM architecture config. Targets roughly 50M parameters.
+#
+# Block layout: 12 blocks total. Block 1 (0-indexed) is an sLSTM — the
+# paper shows a single sLSTM bumps state-tracking tasks (parity, recall)
+# with negligible cost. The other 11 are mLSTM (parallel, matrix memory).
+#
+# With vocab=32k and emb=512, the embedding + output head alone account
+# for ~33M params. The 12 blocks add ~25-30M. Run scripts/count_params.py
+# to see exact numbers after instantiation.
+
+vocab_size: 32000
+embedding_dim: 512
+num_blocks: 12
+context_length: 1024
+slstm_at: [1]
+
+# tie_weights: true would share the embedding and LM head (saves ~16M
+# params). The NeurIPS xlstm package does not expose this flag directly
+# in xLSTMLMModelConfig, so we leave heads untied for now.
+
+mlstm_block:
+  mlstm:
+    conv1d_kernel_size: 4
+    qkv_proj_blocksize: 4
+    num_heads: 4
+
+slstm_block:
+  slstm:
+    # backend options: "cuda" (compiled, needs CC>=8.0 — fine on RTX 5080)
+    # or "vanilla" (pure PyTorch, slower, use if CUDA compile fails).
+    backend: cuda
+    num_heads: 4
+    conv1d_kernel_size: 4
+    bias_init: powerlaw_blockdependent
+  feedforward:
+    proj_factor: 1.3
+    act_fn: gelu

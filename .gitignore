@@ -1,0 +1,30 @@
+# Python / virtualenv
+venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+
+# Runs (checkpoints, logs) — regenerados a cada treino
+runs/
+runs.cpu_backup/
+*.bak
+*.bak.jsonl
+
+# Artifacts (livros, tokenizer, figuras) — todos regeneráveis com
+# `python -m scripts.prepare_books` + `bash scripts/run_desktop.sh`
+artifacts/
+
+# Figura gerada na raiz pra pdflatex consumir (cópia de
+# artifacts/scaling_curve.png)
+/scaling_curve.png
+
+# LaTeX build outputs
+*.aux
+*.log
+*.out
+*.toc
+*.pdf
+*.synctex.gz
+*.fls
+*.fdb_latexmk
