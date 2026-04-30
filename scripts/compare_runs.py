@@ -51,12 +51,12 @@ def parse_log(path: Path) -> dict:
 
 def print_summary(runs: list[tuple[str, dict]]) -> None:
     print(f"\n{'='*60}")
-    print(f"{'run':<20s} {'final loss':>12s} {'final ppl':>12s} "
-          f"{'best ppl':>12s}")
+    print(f"{'Run':<20s} {'Final loss':>12s} {'Final PPL':>12s} "
+          f"{'Best PPL':>12s}")
     print("=" * 60)
     for label, data in runs:
         if not data["eval_ppl"]:
-            print(f"{label:<20s} (sem evals)")
+            print(f"{label:<20s} (no evals)")
             continue
         final_loss = data["eval_loss"][-1]
         final_ppl = data["eval_ppl"][-1]
@@ -84,15 +84,15 @@ def plot(runs: list[tuple[str, dict]], out_path: Path) -> None:
             ax2.plot(data["eval_steps"], data["eval_ppl"],
                      label=label, marker="o", linewidth=2)
 
-    ax1.set_xlabel("step")
-    ax1.set_ylabel("train loss")
-    ax1.set_title("Loss de treino")
+    ax1.set_xlabel("Training step")
+    ax1.set_ylabel("Training loss")
+    ax1.set_title("Training loss")
     ax1.legend()
     ax1.grid(True, alpha=0.3)
 
-    ax2.set_xlabel("step")
-    ax2.set_ylabel("dev perplexity")
-    ax2.set_title("Perplexidade no dev set (holdout)")
+    ax2.set_xlabel("Training step")
+    ax2.set_ylabel("Held-out perplexity")
+    ax2.set_title("Held-out perplexity (log scale)")
     ax2.legend()
     ax2.grid(True, alpha=0.3)
     ax2.set_yscale("log")

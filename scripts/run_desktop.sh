@@ -125,5 +125,26 @@ echo "=== regenerate scaling curve ==="
 cp artifacts/scaling_curve.png ./scaling_curve.png
 
 echo
+echo "=== author-classification linear probe (downstream eval) ==="
+# Roda nos checkpoints medium e 10M de cada arch — produzem JSONs
+# em artifacts/probe_*.json com accuracy + macro-F1 + per-author F1.
+for ARCH_SCALE in xlstm_medium xlstm_10m transformer_medium transformer_10m; do
+    arch="${ARCH_SCALE%%_*}"
+    cfg="configs/${ARCH_SCALE}.yaml"
+    ckpt="runs/${ARCH_SCALE}/best.pt"
+    out="artifacts/probe_${ARCH_SCALE}.json"
+    if [ -f "$ckpt" ]; then
+        echo
+        echo "--- probe ${ARCH_SCALE} ---"
+        "$PY" -m scripts.probe_classify \
+            --ckpt "$ckpt" --config "$cfg" --arch "$arch" \
+            --out "$out" || true
+    else
+        echo "(skip probe ${ARCH_SCALE}: ${ckpt} ausente)"
+    fi
+done
+
+echo
 echo "feito. tabela final está no output do compare_runs acima."
-echo "próximo passo: atualizar Tabela 1 no main.tex e rodar pdflatex."
+echo "JSONs do probe em artifacts/probe_*.json (use no paper)."
+echo "próximo passo: atualizar Tabela 1 e Tabela do probe no main.tex e rodar pdflatex."
