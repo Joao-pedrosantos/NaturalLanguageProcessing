@@ -14,28 +14,110 @@ Projeto final da cadeira de NLP.
 - **Treino real** (`configs/*_50m.yaml`): ~50M params, Wikipedia PT+EN
   streaming, 24-36h na RTX 5080. Não usado no paper atual.
 
-## Desktop GPU run (large)
+## Desktop GPU run (tiny + medium + 10M + large, ambas as arquiteturas)
 
-Pré-requisitos no desktop:
+### Pré-requisitos
+
+- Driver NVIDIA $\ge$ 560, CUDA 12.8 (RTX 5080 / Blackwell exige isso).
+- Python 3.10+.
+- (Windows) Git for Windows instalado, pra ter `bash` disponível via Git Bash.
+
+### Quickstart no desktop
+
+**Linux/macOS:**
 
 ```bash
-# driver NVIDIA >= 560, CUDA 12.8
+git clone https://github.com/Joao-pedrosantos/NaturalLanguageProcessing.git
+cd NaturalLanguageProcessing
 python -m venv venv && source venv/bin/activate
 pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu128
 pip install -e .
-```
-
-Adicione mais livros em `configs/books.yaml` (descomente os candidatos
-e preencha o `id` consultando o catálogo do Project Gutenberg). Depois:
-
-```bash
 bash scripts/run_desktop.sh
 ```
 
-O script: confere GPU, baixa livros novos, (re)treina tokenizer se
-necessário, treina xLSTM large e Transformer large, regenera
-`scaling_curve.png` com tiny + medium + large e copia pra raiz pro
-`pdflatex main.tex` consumir.
+**Windows (Git Bash — recomendado):**
+
+```bash
+git clone https://github.com/Joao-pedrosantos/NaturalLanguageProcessing.git
+cd NaturalLanguageProcessing
+python -m venv venv
+source venv/Scripts/activate          # Git Bash usa Scripts/, não bin/
+pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu128
+pip install -e .
+bash scripts/run_desktop.sh
+```
+
+**Windows (PowerShell, equivalente):**
+
+```powershell
+git clone https://github.com/Joao-pedrosantos/NaturalLanguageProcessing.git
+cd NaturalLanguageProcessing
+python -m venv venv
+venv\Scripts\Activate.ps1
+pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu128
+pip install -e .
+# Para rodar o pipeline completo, abra Git Bash e execute:
+#   bash scripts/run_desktop.sh
+# (As etapas individuais estão listadas abaixo se preferir rodar à mão.)
+```
+
+### O que `run_desktop.sh` faz
+
+1. Sanity-check da GPU (CUDA disponível, compute capability $\ge$ 8.0).
+2. Baixa livros novos do Project Gutenberg (idempotente — pula os já em `artifacts/train_books/`).
+3. Retreina o tokenizer (vocab=8000, byte-level BPE) sobre o corpus atual.
+4. Arquiva `runs/` antigo em `runs.cpu_backup/` na primeira execução.
+5. Conta params dos 8 modelos (xLSTM e Transformer × tiny/medium/10M/large).
+6. Treina os 8 modelos em sequência via `scripts/train_local.py`.
+7. Limpa logs concatenados (caso algum run tenha sido retomado).
+8. Regenera `scaling_curve.png` com os 8 runs e copia pra raiz pro `pdflatex` consumir.
+
+Tempo estimado total na RTX 5080: ~6–10h. O runner é reentrante — re-executar resume do último checkpoint.
+
+### Etapas à mão (se precisar rodar isolado)
+
+```bash
+# Confere GPU
+python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
+
+# Baixa corpus
+python -m scripts.prepare_books
+
+# Treina tokenizer (vocab 8k, byte-level BPE)
+python -m scripts.train_tokenizer --corpus-dir artifacts/train_books --vocab-size 8000 --out artifacts/tokenizer.json
+
+# Conta params de uma config
+python -m scripts.count_params --config configs/xlstm_10m.yaml
+
+# Treina uma config específica
+python -m scripts.train_local --config configs/train_10m.yaml --train-file artifacts/train_books --dev-file artifacts/dev/pt_dev.txt
+
+# Compara runs e regenera figura
+python -m scripts.compare_runs --runs runs/xlstm_tiny runs/xlstm_medium runs/xlstm_10m runs/xlstm_large runs/transformer_tiny runs/transformer_medium runs/transformer_10m runs/transformer_large --labels "xLSTM tiny" "xLSTM medium" "xLSTM 10M" "xLSTM large" "Transformer tiny" "Transformer medium" "Transformer 10M" "Transformer large" --out artifacts/scaling_curve.png
+```
+
+### 100M (Wikipedia streaming, infraestrutura separada)
+
+Os 100M usam o pipeline de streaming Wikipedia (`scripts/train.py`,
+vocab=32k, ctx=1024) e NÃO entram no `run_desktop.sh`. Quando estiver
+pronto pra rodar:
+
+```bash
+python -m scripts.sample_for_tokenizer --target-mb 100
+python -m scripts.train_tokenizer --vocab-size 32000
+python -m scripts.prepare_eval_set --target-mb 5
+python -m scripts.train --config configs/train_100m.yaml
+python -m scripts.train --config configs/train_100m_transformer.yaml
+```
+
+Tempo estimado: ~12–18h cada na RTX 5080 (Chinchilla-optimal de ~2B tokens).
+
+### Conversar com um modelo treinado
+
+```bash
+python -m scripts.chat --ckpt runs/xlstm_10m/best.pt --config configs/xlstm_10m.yaml --arch xlstm
+python -m scripts.chat --ckpt runs/transformer_10m/best.pt --config configs/transformer_10m.yaml --arch transformer
+```
 
 ---
 

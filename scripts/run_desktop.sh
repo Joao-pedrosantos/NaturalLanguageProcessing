@@ -71,10 +71,10 @@ mkdir -p runs
 
 echo
 echo "=== count params ==="
-for ARCH_CONFIG in xlstm_tiny xlstm_medium xlstm_large; do
+for ARCH_CONFIG in xlstm_tiny xlstm_medium xlstm_10m xlstm_large; do
     "$PY" -m scripts.count_params --config "configs/${ARCH_CONFIG}.yaml" || true
 done
-for ARCH_CONFIG in transformer_tiny transformer_medium transformer_large; do
+for ARCH_CONFIG in transformer_tiny transformer_medium transformer_10m transformer_large; do
     "$PY" -m scripts.count_params --config "configs/${ARCH_CONFIG}.yaml" --arch transformer || true
 done
 
@@ -92,11 +92,13 @@ run_one() {
 # xLSTM family
 run_one "xLSTM tiny"        configs/train_tiny.yaml
 run_one "xLSTM medium"      configs/train_medium.yaml
+run_one "xLSTM 10M"         configs/train_10m.yaml
 run_one "xLSTM large"       configs/train_large.yaml
 
 # Transformer family
 run_one "Transformer tiny"   configs/train_tiny_transformer.yaml
 run_one "Transformer medium" configs/train_medium_transformer.yaml
+run_one "Transformer 10M"    configs/train_10m_transformer.yaml
 run_one "Transformer large"  configs/train_large_transformer.yaml
 
 echo
@@ -104,18 +106,20 @@ echo "=== clean logs (caso algum run tenha sido retomado) ==="
 "$PY" -m scripts.clean_log \
     runs/xlstm_tiny/log.jsonl \
     runs/xlstm_medium/log.jsonl \
+    runs/xlstm_10m/log.jsonl \
     runs/xlstm_large/log.jsonl \
     runs/transformer_tiny/log.jsonl \
     runs/transformer_medium/log.jsonl \
+    runs/transformer_10m/log.jsonl \
     runs/transformer_large/log.jsonl
 
 echo
 echo "=== regenerate scaling curve ==="
 "$PY" -m scripts.compare_runs \
-    --runs runs/xlstm_tiny runs/xlstm_medium runs/xlstm_large \
-           runs/transformer_tiny runs/transformer_medium runs/transformer_large \
-    --labels "xLSTM tiny" "xLSTM medium" "xLSTM large" \
-             "Transformer tiny" "Transformer medium" "Transformer large" \
+    --runs runs/xlstm_tiny runs/xlstm_medium runs/xlstm_10m runs/xlstm_large \
+           runs/transformer_tiny runs/transformer_medium runs/transformer_10m runs/transformer_large \
+    --labels "xLSTM tiny" "xLSTM medium" "xLSTM 10M" "xLSTM large" \
+             "Transformer tiny" "Transformer medium" "Transformer 10M" "Transformer large" \
     --out artifacts/scaling_curve.png
 
 cp artifacts/scaling_curve.png ./scaling_curve.png

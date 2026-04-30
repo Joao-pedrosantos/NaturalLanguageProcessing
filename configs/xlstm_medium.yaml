@@ -19,7 +19,7 @@ mlstm_block:
 
 slstm_block:
   slstm:
-    backend: cuda   # GPU desktop. Em CPU, troque para "vanilla".
+    backend: cuda   # GPU desktop. Em CPU, use xlstm_medium_legacy.yaml.
     num_heads: 4
     conv1d_kernel_size: 4
     bias_init: powerlaw_blockdependent

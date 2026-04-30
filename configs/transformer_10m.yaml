@@ -1,0 +1,20 @@
+# Transformer "10M" pareado com xlstm_10m.
+#
+# Comparado ao medium:
+#   emb:           256 -> 320
+#   blocks:          4 ->   6
+#   ctx:           256 -> 512
+#   mlp_expansion:   2 ->   2  (mantido pra casar params com xLSTM 10M)
+#
+# Mesmo emb_dim do xlstm_10m, 6 blocos (vs 8 do xLSTM); mlp_expansion=2
+# em vez do padrão 4 pra bater contagem de params com xLSTM 10M.
+#
+# Contagem confirmada: 10.22M params (xLSTM 10M é 10.14M).
+
+vocab_size: 8000
+embedding_dim: 320
+num_blocks: 6
+num_heads: 8
+context_length: 512
+mlp_expansion: 2
+dropout: 0.0

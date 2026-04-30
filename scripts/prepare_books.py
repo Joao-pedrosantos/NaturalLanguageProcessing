@@ -36,10 +36,11 @@ END_RE = re.compile(
 
 
 def fetch(book_id: int) -> str:
-    """Baixa o .txt do Gutenberg. Tenta dois layouts conhecidos."""
+    """Baixa o .txt do Gutenberg. Tenta três layouts conhecidos."""
     candidates = [
         f"https://www.gutenberg.org/cache/epub/{book_id}/pg{book_id}.txt",
         f"https://www.gutenberg.org/files/{book_id}/{book_id}-0.txt",
+        f"https://www.gutenberg.org/ebooks/{book_id}.txt.utf-8",
     ]
     last_err: Exception | None = None
     for url in candidates:

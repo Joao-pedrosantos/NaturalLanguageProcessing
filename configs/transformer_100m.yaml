@@ -1,0 +1,12 @@
+# Transformer "100M" pareado com xlstm_100m.
+# Usa o tokenizer Wikipedia (vocab=32k) e ctx=1024.
+#
+# Contagem confirmada: 100.70M params (gap 2% vs xLSTM 100M).
+
+vocab_size: 32000
+embedding_dim: 640
+num_blocks: 12
+num_heads: 8
+context_length: 1024
+mlp_expansion: 4
+dropout: 0.0

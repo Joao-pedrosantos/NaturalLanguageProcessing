@@ -1,0 +1,32 @@
+# xLSTM "10M": escala intermediária entre medium (~4.5M) e large (~27M),
+# alvo ~10M params para uma terceira amostra na curva de scaling.
+#
+# Comparado ao medium:
+#   emb:       256 -> 320  (1.25x)
+#   blocks:      6 ->   8  (1.33x)
+#   ctx:       256 -> 512  (2x — context maior aproveita mais o sLSTM)
+#   slstm_at:  [1] -> [1, 4]  (dois sLSTM intercalados, como no large)
+#
+# Contagem confirmada: 10.14M params.
+
+vocab_size: 8000
+embedding_dim: 320
+num_blocks: 8
+context_length: 512
+slstm_at: [1, 4]
+
+mlstm_block:
+  mlstm:
+    conv1d_kernel_size: 4
+    qkv_proj_blocksize: 4
+    num_heads: 8
+
+slstm_block:
+  slstm:
+    backend: cuda   # GPU desktop. Em CPU, troque para "vanilla".
+    num_heads: 8
+    conv1d_kernel_size: 4
+    bias_init: powerlaw_blockdependent
+  feedforward:
+    proj_factor: 1.3
+    act_fn: gelu

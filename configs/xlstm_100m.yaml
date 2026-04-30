@@ -1,0 +1,29 @@
+# xLSTM "100M": escala alvo no desktop, casada com transformer_100m.
+# Usa o tokenizer Wikipedia (vocab=32k) e ctx=1024, pareando o pipeline
+# de streaming de configs/train_50m.yaml.
+#
+# Contagem confirmada: 102.74M params.
+#
+# Pareado com transformer_100m.yaml (100.70M params, gap 2%).
+
+vocab_size: 32000
+embedding_dim: 832
+num_blocks: 12
+context_length: 1024
+slstm_at: [1, 6]
+
+mlstm_block:
+  mlstm:
+    conv1d_kernel_size: 4
+    qkv_proj_blocksize: 4
+    num_heads: 8
+
+slstm_block:
+  slstm:
+    backend: cuda
+    num_heads: 8
+    conv1d_kernel_size: 4
+    bias_init: powerlaw_blockdependent
+  feedforward:
+    proj_factor: 1.3
+    act_fn: gelu

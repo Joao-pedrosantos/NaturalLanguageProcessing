@@ -64,7 +64,7 @@ train:
     author: José de Alencar
     title: A Pata da Gazela
 
-  # ---------- Eça de Queirós (5 livros) ----------
+  # ---------- Eça de Queirós (9 livros) ----------
   - id: 16384
     file: o_mandarim.txt
     author: Eça de Queirós
@@ -85,12 +85,74 @@ train:
     file: a_cidade_e_as_serras.txt
     author: Eça de Queirós
     title: A Cidade e as Serras
+  - id: 23145
+    file: a_ilustre_casa_de_ramires.txt
+    author: Eça de Queirós
+    title: A Ilustre Casa de Ramires
+  - id: 31971
+    file: o_crime_do_padre_amaro.txt
+    author: Eça de Queirós
+    title: O Crime do Padre Amaro
+  - id: 27637
+    file: a_correspondencia_de_fradique_mendes.txt
+    author: Eça de Queirós
+    title: A Correspondência de Fradique Mendes
+  - id: 31347
+    file: contos_eca.txt
+    author: Eça de Queirós
+    title: Contos
 
-  # ---------- Camilo Castelo Branco (1 livro, realismo PT) ----------
+  # ---------- Camilo Castelo Branco (6 livros, realismo PT) ----------
   - id: 16425
     file: amor_de_perdicao.txt
     author: Camilo Castelo Branco
     title: Amor de Perdição
+  - id: 17927
+    file: a_queda_dum_anjo.txt
+    author: Camilo Castelo Branco
+    title: A Queda d'um Anjo
+  - id: 26988
+    file: amor_de_salvacao.txt
+    author: Camilo Castelo Branco
+    title: Amor de Salvação
+  - id: 27364
+    file: a_filha_do_arcediago.txt
+    author: Camilo Castelo Branco
+    title: A Filha do Arcediago
+  - id: 26025
+    file: carlota_angela.txt
+    author: Camilo Castelo Branco
+    title: Carlota Angela
+  - id: 21406
+    file: novelas_do_minho.txt
+    author: Camilo Castelo Branco
+    title: Novelas do Minho
+
+  # ---------- Júlio Dinis (3 livros, romantismo PT) ----------
+  - id: 29120
+    file: a_morgadinha_dos_canaviais.txt
+    author: Júlio Dinis
+    title: A Morgadinha dos Canaviais
+  - id: 16443
+    file: uma_familia_ingleza.txt
+    author: Júlio Dinis
+    title: Uma Família Ingleza
+  - id: 16428
+    file: os_fidalgos_da_casa_mourisca.txt
+    author: Júlio Dinis
+    title: Os Fidalgos da Casa Mourisca
+
+  # ---------- Almeida Garrett (1 livro, romantismo PT) ----------
+  - id: 24401
+    file: viagens_na_minha_terra.txt
+    author: Almeida Garrett
+    title: Viagens na Minha Terra
+
+  # ---------- Aluísio Azevedo (1 livro, naturalismo BR) ----------
+  - id: 69187
+    file: o_cortico.txt
+    author: Aluísio Azevedo
+    title: O Cortiço
 
   # ---------- Bernardo Guimarães (1 livro, abolicionismo BR) ----------
   - id: 74475
