@@ -27,7 +27,19 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
-PY="${PY:-venv/bin/python}"
+
+# venv layout difere entre Linux/macOS (bin/) e Windows Git Bash (Scripts/).
+if [ -z "${PY:-}" ]; then
+    if [ -x "venv/bin/python" ]; then
+        PY="venv/bin/python"
+    elif [ -x "venv/Scripts/python.exe" ]; then
+        PY="venv/Scripts/python.exe"
+    else
+        echo "venv não encontrado em venv/bin/ nem venv/Scripts/." >&2
+        echo "ative o venv e rode: PY=\$(which python) bash scripts/run_desktop.sh" >&2
+        exit 1
+    fi
+fi
 
 echo "=== sanity-check GPU ==="
 "$PY" - <<'PYEOF'
@@ -38,8 +50,6 @@ if ok:
     print(f"  device: {torch.cuda.get_device_name(0)}")
     cap = torch.cuda.get_device_capability(0)
     print(f"  compute capability: sm_{cap[0]}{cap[1]}")
-    if cap[0] < 8:
-        raise SystemExit("CC<8.0; xlstm cuda backend exige >=8.0")
 else:
     raise SystemExit("CUDA indisponível — rode em máquina com GPU ou ajuste o backend para vanilla")
 PYEOF

@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import random
+from functools import partial
 from pathlib import Path
 
 import numpy as np
@@ -119,13 +120,13 @@ def main():
         n_files = len(list(train_path.glob("*.txt")))
         print(f"treino: pasta com {n_files} arquivo(s) .txt")
         train_ds = CyclingDataset(
-            lambda: MultiFileDataset(train_path, tokenizer, cfg["seq_len"])
+            partial(MultiFileDataset, train_path, tokenizer, cfg["seq_len"])
         )
     else:
         # arquivo único
         print(f"treino: arquivo único ({train_path})")
         train_ds = CyclingDataset(
-            lambda: FileEvalDataset(train_path, tokenizer, cfg["seq_len"])
+            partial(FileEvalDataset, train_path, tokenizer, cfg["seq_len"])
         )
 
     train_loader = DataLoader(

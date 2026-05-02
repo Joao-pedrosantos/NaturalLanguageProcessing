@@ -19,7 +19,7 @@ mlstm_block:
 
 slstm_block:
   slstm:
-    backend: cuda   # GPU desktop. Em CPU, use xlstm_medium_legacy.yaml.
+    backend: vanilla   # cuda backend quebra no Windows com CUDA 12.x; vanilla roda na GPU via PyTorch puro.
     num_heads: 4
     conv1d_kernel_size: 4
     bias_init: powerlaw_blockdependent

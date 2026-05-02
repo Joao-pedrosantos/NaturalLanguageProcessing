@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(venv/Scripts/python.exe -c \"import tokenizers; print\\(tokenizers.__version__\\)\")"
+    ]
+  }
+}
