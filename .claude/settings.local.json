@@ -1,7 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "Bash(venv/Scripts/python.exe -c \"import tokenizers; print\\(tokenizers.__version__\\)\")"
+      "Bash(venv/Scripts/python.exe -c \"import tokenizers; print\\(tokenizers.__version__\\)\")",
+      "Bash(python -m scripts.count_params --config configs/xlstm_tiny.yaml)",
+      "Bash(python -m scripts.count_params --config configs/xlstm_medium.yaml)",
+      "Bash(python -m scripts.count_params --config configs/xlstm_10m.yaml)",
+      "Bash(pdflatex -interaction=nonstopmode -halt-on-error main.tex)",
+      "Bash(python3 *)"
     ]
   }
 }

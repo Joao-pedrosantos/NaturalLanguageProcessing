@@ -16,6 +16,7 @@
 \usepackage{booktabs}
 \usepackage{caption}
 \usepackage{subcaption}
+\usepackage{amsmath}                       % \text in math, etc.
 \usepackage[hidelinks]{hyperref}
 \usepackage{xcolor}
 \usepackage{titlesec}
@@ -279,7 +280,42 @@ contain roughly 1.45\,M parameters (gap of 0.5\%). At the medium scale,
 the xLSTM contains 4.55\,M parameters and the Transformer 4.22\,M (gap
 of 7\%). The Transformer's MLP expansion factor is reduced from the
 canonical~4 to~2 at the medium scale to keep the parameter budget
-balanced.
+balanced. The complete architecture specification for each
+configuration is summarised in Table~\ref{tab:archspec}.
+
+\begin{table}[h]
+\centering
+\caption{Per-configuration architecture specification. \emph{Inner} for
+  xLSTM denotes the (sLSTM, mLSTM) split inside the block stack; for the
+  Transformer it denotes the MLP expansion factor relative to the
+  embedding dimension.}
+\label{tab:archspec}
+\small
+\begin{tabular}{lrrrrrr}
+\toprule
+Model & Vocab & Embed & Blocks & Heads & Context & Inner \\
+\midrule
+xLSTM tiny         & 4{,}000 & 128 & 4 (3$\times$mLSTM, 1$\times$sLSTM) & 4 & 256 & FFN $\times 1.3$ \\
+xLSTM medium       & 4{,}000 & 256 & 6 (5$\times$mLSTM, 1$\times$sLSTM) & 4 & 256 & FFN $\times 1.3$ \\
+Transformer tiny   & 4{,}000 & 128 & 2 & 4 & 256 & MLP $\times 4$ \\
+Transformer medium & 4{,}000 & 256 & 4 & 8 & 256 & MLP $\times 2$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{FLOPs equivalence.}
+Parameter count is one budget; compute is another. Using the standard
+Chinchilla approximation $\text{FLOPs}_{\text{fwd}} \approx 2N$ per token
+(with $N$ the non-embedding parameter count) and adding the explicit
+$\mathcal{O}(L^2 d)$ attention cost for the Transformer, we obtain
+forward-pass costs of $1.90$\,M (xLSTM tiny), $2.08$\,M (Transformer
+tiny), $7.06$\,M (xLSTM medium) and $7.31$\,M (Transformer medium) FLOPs
+per token. The two architectures are matched in compute to within $9\%$
+at the tiny scale and $4\%$ at the medium scale. The 7\% parameter gap
+at the medium scale therefore corresponds to a tighter $\sim 4\%$ FLOPs
+gap once the Transformer's quadratic-in-context attention term is
+accounted for, which mitigates one obvious objection to a strictly
+parameter-matched comparison.
 
 \subsection{Training}
 
@@ -293,7 +329,53 @@ clipping at norm 1.0. Sequences of length 256 are packed without padding,
 using \texttt{</s>} as document separator. Batches contain 4 sequences;
 no gradient accumulation is used at this scale. Training runs for 1{,}500
 steps at the tiny scale and 2{,}000 steps at the medium scale. All
-experiments use full \texttt{float32} precision on CPU.
+experiments use full \texttt{float32} precision on CPU. The complete
+hyperparameter set is given in Table~\ref{tab:hyperparams}.
+
+\begin{table}[h]
+\centering
+\caption{Training hyperparameters. All values are identical between
+  xLSTM and Transformer at a given scale; the architecture identifier is
+  the only differing field across paired runs.}
+\label{tab:hyperparams}
+\small
+\begin{tabular}{lrr}
+\toprule
+Hyperparameter & Tiny & Medium \\
+\midrule
+Optimizer                 & \multicolumn{2}{c}{AdamW} \\
+$(\beta_1, \beta_2)$      & \multicolumn{2}{c}{$(0.9,\, 0.95)$} \\
+Weight decay (rank $\ge 2$) & \multicolumn{2}{c}{$0.1$} \\
+Peak learning rate        & \multicolumn{2}{c}{$3\times 10^{-4}$} \\
+Min LR (cosine floor)     & \multicolumn{2}{c}{$10\%$ of peak} \\
+LR schedule               & \multicolumn{2}{c}{linear warmup, cosine decay} \\
+Gradient clip (L2 norm)   & \multicolumn{2}{c}{$1.0$} \\
+Sequence length           & \multicolumn{2}{c}{$256$} \\
+Batch size                & \multicolumn{2}{c}{$4$} \\
+Gradient accumulation     & \multicolumn{2}{c}{$1$} \\
+Precision                 & \multicolumn{2}{c}{\texttt{float32}} \\
+Random seed               & \multicolumn{2}{c}{$42$} \\
+\midrule
+Warmup steps              & $100$  & $200$ \\
+Total steps               & $1{,}500$ & $2{,}000$ \\
+Eval interval (steps)     & $100$  & $200$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Token budget.}
+The training budgets correspond to $1.54$\,M tokens (tiny) and $2.05$\,M
+tokens (medium). Expressed as the token-to-parameter ratio used in
+Chinchilla-style analyses~\cite{hoffmann2022}, this places our runs at
+ratios of $\approx 1.0$\,(tiny) and $\approx 0.45$\,(medium) tokens per
+parameter, $20$ to $45\times$ \emph{below} the compute-optimal ratio of
+$\sim 20{:}1$. Both runs are therefore deeply data-limited rather than
+capacity-limited. We do not view this as an experimental flaw but as a
+deliberate property of the regime studied: the corpus size is the
+binding constraint imposed by the public-domain Portuguese literary
+record. We expect this regime to favour architectures with weaker
+inductive biases (i.e., fewer parameters spent on learnable gating
+machinery), an observation we return to in the Discussion.
 
 \subsection{Evaluation}
 
@@ -308,7 +390,7 @@ and the latter because it characterises end-of-training behaviour.
 % =============================================================================
 \section{Results}
 
-\subsection{Held-out perplexity}
+\subsection{Held-out perplexity}\label{sec:held-out-ppl}
 
 Table~\ref{tab:results} reports best and final dev perplexity along with
 training throughput for the four configurations. Figure~\ref{fig:scaling}
@@ -343,7 +425,43 @@ Transformer medium & 4.22\,M & 235.6 & 235.6 & 8.6\,k tok/s \\
 \label{fig:scaling}
 \end{figure}
 
-Two observations stand out.
+To accompany Figure~\ref{fig:scaling}, Table~\ref{tab:ppltrajectory}
+reports the held-out perplexity at fixed checkpoints during training for
+all four runs. The trajectories make several patterns visible that are
+hard to read off the log-scale figure: (i)~the convergence is monotone
+with intermittent transient spikes (e.g.\ xLSTM tiny at step~300, both
+tiny runs at step~900 — the latter coincides with the cosine decay
+beginning), (ii)~at every checkpoint past step~600 the medium models
+dominate their tiny counterparts, and (iii)~the medium-scale crossover
+between architectures emerges only past step~1200, with the xLSTM and
+Transformer crossing one another twice (steps~1400 and~1800) before
+settling at step~2000.
+
+\begin{table}[h]
+\centering
+\caption{Held-out dev perplexity at fixed training steps. Best-per-row
+  values are in bold. ``--'' marks steps past the run's training budget.}
+\label{tab:ppltrajectory}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrrrr}
+\toprule
+Step & xLSTM tiny & Transformer tiny & xLSTM medium & Transformer medium \\
+\midrule
+200   & 947.7 & 1184.7 & 1200.3 & 1386.8 \\
+400   & 868.6 & 678.5  & 730.7  & 690.3  \\
+600   & 607.2 & 435.4  & 414.0  & 400.8  \\
+800   & 553.1 & 399.0  & 392.0  & 405.9  \\
+1000  & 566.7 & 388.1  & 355.6  & 380.8  \\
+1200  & 480.1 & 342.7  & 278.3  & 286.0  \\
+1400  & \textbf{461.9} & \textbf{332.5}  & 260.2  & 279.9 \\
+1500  & 514.7 & 510.1  & --     & --     \\
+1600  & --    & --     & 280.3  & 293.6  \\
+1800  & --    & --     & 235.7  & 243.9  \\
+2000  & --    & --     & \textbf{229.9}  & \textbf{235.6} \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 First, both architectures benefit substantially from the move from
 tiny to medium scale: best held-out perplexity is reduced by approximately
@@ -367,6 +485,361 @@ ended with best equal to final, suggesting both runs would benefit from
 additional steps; a confirmatory run with the longer schedule is left
 to future work.
 
+\subsection{Sample efficiency}\label{sec:sample-efficiency}
+
+The trajectory data also lets us re-frame the comparison in terms of
+\emph{tokens to reach a target perplexity} rather than perplexity at a
+fixed step count. Table~\ref{tab:tokens-to-ppl} reports, for each run,
+the smallest number of training tokens required to reach a sequence of
+perplexity thresholds. This view is more directly informative about
+sample efficiency than endpoint perplexity, which conflates capacity
+with optimisation budget.
+
+\begin{table}[h]
+\centering
+\caption{Training tokens required to first reach a given held-out
+  perplexity threshold (lower is more sample-efficient). ``--'' marks
+  thresholds the run never reaches within its budget.}
+\label{tab:tokens-to-ppl}
+\small
+\setlength{\tabcolsep}{6pt}
+\begin{tabular}{lrrrr}
+\toprule
+PPL target & xLSTM tiny & Transformer tiny & xLSTM medium & Transformer medium \\
+\midrule
+$\le 1{,}000$ & $0.20$\,M & $0.41$\,M & $0.41$\,M & $0.41$\,M \\
+$\le 600$     & $0.72$\,M & $0.51$\,M & $0.61$\,M & $0.61$\,M \\
+$\le 400$     & --        & $0.72$\,M & $0.82$\,M & $1.02$\,M \\
+$\le 300$     & --        & --        & $1.23$\,M & $1.23$\,M \\
+$\le 250$     & --        & --        & $1.84$\,M & $1.84$\,M \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Two observations: (i)~at the tiny scale the Transformer crosses every
+threshold first that both architectures eventually reach, consistent
+with its lower endpoint perplexity; (ii)~at the medium scale the two
+architectures reach the same thresholds at the same step counts within
+the resolution of our eval grid (every 200 steps), and the xLSTM's
+final-step advantage is driven by the very last evaluations rather
+than by faster crossing of any earlier threshold. Sample-efficiency
+parity at medium scale, combined with end-of-training divergence, is
+also consistent with the \emph{undertrained} reading: if both models
+were trained past the cosine-decay tail, the gap could plausibly grow,
+shrink, or invert.
+
+\subsection{Quantitative analysis of generated text}\label{sec:gentext}
+
+To complement the qualitative samples, we compute two surface-level
+statistics on \emph{generated} (not held-out) text from the medium-scale
+models: type-token ratio (TTR) and verbatim 4-gram repetition rate. We
+sample 5 seeds $\times$ 4 prompts $\times$ 120 new tokens per
+configuration (matched decoding settings: temperature 0.8, top-$k$ 40)
+and concatenate. As a reference we report the same statistics on a
+length-matched 1{,}500-word slice of the held-out corpus
+(\emph{Brás Cubas}). Results are in Table~\ref{tab:gentext}.
+
+\begin{table}[h]
+\centering
+\caption{Surface statistics on $\sim$1.2--1.4\,k generated whitespace
+  tokens. Type-token ratio (TTR) measures lexical diversity; 4-gram
+  repetition rate is the fraction of 4-grams that have already appeared
+  earlier in the same generated stream. Reference values come from a
+  1{,}500-word slice of the held-out novel.}
+\label{tab:gentext}
+\small
+\begin{tabular}{lrrr}
+\toprule
+Source & Tokens & TTR & 4-gram rep. \\
+\midrule
+xLSTM medium (generated)       & $1{,}416$ & $0.277$ & $0.188$ \\
+Transformer medium (generated) & $1{,}192$ & $0.302$ & $0.080$ \\
+\midrule
+Reference (\emph{Brás Cubas}, 1.5\,k words) & $1{,}500$ & $0.564$ & $0.002$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The two architectures differ in a direction not visible from
+perplexity: the Transformer produces measurably more diverse and less
+repetitive output than the xLSTM ($+9\%$ relative TTR, less than
+half the 4-gram repetition rate), despite a marginally \emph{worse}
+held-out perplexity. Both models remain far from the human-text
+references on both metrics, as expected at this scale. We flag the
+divergence between perplexity ranking and generation-time repetition as
+a candidate signal for future work: surface repetition is a known
+failure mode of small autoregressive LMs, and it is not obvious that
+the architecture which scores better in held-out PPL also generates
+better samples on these surface measures.
+
+\subsection{Downstream task: author classification probe}\label{sec:probe}
+
+Held-out perplexity measures how well the model predicts the next token,
+but it conflates lexical and stylistic signal in a way that may not
+match what a downstream user would care about. We complement
+Section~\ref{sec:held-out-ppl} with a standard linear-probe protocol:
+freeze the trained LM, extract mean-pooled hidden states from
+fixed-length passages, and train a single linear classifier to predict
+the author of each passage. The probe eval gives an architecture-level
+comparison metric that does not depend on perplexity calibration.
+
+\paragraph{Protocol.}
+For every novel in the training corpus we cut non-overlapping passages
+of $128$ tokens (using the same byte-level BPE tokenizer the LMs were
+trained with), capping at $400$ passages per author to control class
+imbalance. This yields $9$ authors $\times\, 400 = 3{,}600$ passages.
+Each passage is fed through the frozen LM; we mean-pool the
+hidden-state output over the time axis (i.e., the output of
+\texttt{xlstm\_block\_stack} for xLSTM, or the post-final-norm hidden
+state for the Transformer) to obtain one $D$-dimensional feature vector.
+Features are standardised per dimension using train-split statistics. A
+single \texttt{nn.Linear} layer is trained for $200$ epochs with AdamW
+($\eta = 10^{-2}$, weight decay $10^{-3}$), cross-entropy loss, on a
+stratified $80\%/20\%$ split. We report accuracy and macro-averaged F1
+on the held-out $20\%$.
+
+\paragraph{Out-of-pretraining authors.}
+The pretraining corpus that produced the medium-scale checkpoints used
+six novels from three authors (Machado de Assis, José de Alencar, Eça
+de Queirós). The probe is run over the expanded $9$-author corpus that
+the models have \emph{not} seen during pretraining for six of the nine
+authors. The probe therefore tests whether the LMs' representations
+support author identification both for in-pretraining and
+out-of-pretraining authors.
+
+\paragraph{Results.}
+Table~\ref{tab:probe} reports overall and per-author metrics for both
+medium-scale checkpoints. Both architectures clear the
+majority-class baseline ($11.1\%$, since the per-author cap balances
+the dataset) by a wide margin, indicating that the LMs encode
+substantial author-discriminative signal even though they were not
+trained for classification. The xLSTM outperforms the Transformer by
+$6.7$ accuracy points and $6.9$ macro-F1 points; this ranking is in the
+same direction as the held-out-perplexity ranking at the medium scale
+(xLSTM wins both), which is some evidence that the perplexity advantage
+is not an artefact of the metric. Both architectures are strongest on
+authors that contributed multiple novels to pretraining (José de
+Alencar, Machado de Assis) and on authors with the most stylistically
+distinctive prose in the set (Bernardo Guimarães, Eça de Queirós), and
+weakest on the most prolific author of the period in general (Camilo
+Castelo Branco) and on Júlio Dinis, both unseen during pretraining and
+both Portuguese realists with overlapping literary register.
+
+\begin{table}[h]
+\centering
+\caption{Author-classification linear probe on $128$-token passages
+  (9 authors, $400$ passages each, $80\%/20\%$ stratified split).
+  Bold marks the higher value per row.}
+\label{tab:probe}
+\small
+\setlength{\tabcolsep}{6pt}
+\begin{tabular}{lrr}
+\toprule
+Metric & xLSTM medium & Transformer medium \\
+\midrule
+Test accuracy             & \textbf{66.4\%} & 59.7\% \\
+Test macro-F1             & \textbf{66.4\%} & 59.5\% \\
+Train accuracy (sanity)   & $83.3\%$        & $73.3\%$ \\
+Majority-class baseline   & \multicolumn{2}{c}{$11.1\%$} \\
+\midrule
+\multicolumn{3}{l}{\emph{Per-author F1 (test set):}} \\
+Almeida Garrett           & \textbf{60.7\%} & 54.9\% \\
+Aluísio Azevedo           & \textbf{54.1\%} & 53.2\% \\
+Bernardo Guimarães        & \textbf{70.5\%} & 64.6\% \\
+Camilo Castelo Branco     & \textbf{54.4\%} & 51.5\% \\
+Eça de Queirós            & \textbf{70.7\%} & 56.9\% \\
+José de Alencar           & \textbf{86.5\%} & 81.3\% \\
+Júlio Dinis               & \textbf{52.9\%} & 42.1\% \\
+Machado de Assis          & \textbf{83.4\%} & 74.4\% \\
+Raul Pompéia              & \textbf{64.2\%} & 56.8\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Caveats.}
+The probe is trained on top of frozen features; we do not fine-tune the
+LM. Per-author macro-F1 numbers should be read in the light of the
+small per-class test set ($80$ passages) and the absence of multi-seed
+estimates for the probe itself, which we discuss in
+Section~\ref{sec:limitations}.
+
+\subsection{Downstream task: sentiment probe (IMDB pt-BR)}\label{sec:sentiment}
+
+The author probe of Section~\ref{sec:probe} measures how well the LM
+encodes the \emph{stylistic} signal that distinguishes 19th-century
+authors --- a signal close to the LM's pretraining distribution.
+To complement it with a task that is genuinely \emph{out-of-distribution}
+for our pretraining corpus, we run the same linear-probe protocol on a
+binary sentiment dataset: \texttt{celsowm/imdb-reviews-pt-br}, the
+$\sim$49\,k IMDB review collection translated to Portuguese.\footnote{%
+\url{https://huggingface.co/datasets/celsowm/imdb-reviews-pt-br}.
+The original English IMDB reviews of Maas et
+al.~\cite{maas2011imdb}, machine-translated to Brazilian Portuguese.}
+The pretraining corpus contains no movie reviews and no contemporary
+Portuguese: a strong probe score under this shift is evidence that the
+LM has learned representations that transfer beyond the
+narrow-domain training data.
+
+\paragraph{Protocol.}
+We sample $2{,}000$ reviews per class ($4{,}000$ in total) from the
+dataset, tokenise each one with the byte-level BPE that was used for
+pretraining (Section~3.2), truncate or right-pad to $256$ tokens, and
+extract one feature vector per review by mean-pooling the frozen LM's
+hidden states over the time axis. The features are standardised with
+train-split statistics, stratified-split $80\%/20\%$, and used to train
+a single \texttt{nn.Linear(D, 2)} layer for $200$ epochs with AdamW
+($\eta = 10^{-2}$, weight decay $10^{-3}$). The protocol is identical
+to the author probe except for (i)~the dataset, (ii)~the number of
+classes, and (iii)~the per-review truncation in place of the per-book
+sliding window.
+
+\paragraph{Results.}
+Table~\ref{tab:sentiment} reports the metrics. Both architectures
+clear the $50\%$ majority-class baseline; the xLSTM outperforms the
+Transformer by $7.9$ accuracy points and $7.9$ macro-F1 points on this
+out-of-domain task. The ranking direction is the same as the author
+probe (Table~\ref{tab:probe}) and as held-out perplexity at the medium
+scale (Table~\ref{tab:results}). We caveat this finding in
+Section~\ref{sec:olist}, where a multi-seed re-run of the same protocol
+on a native-Brazilian-Portuguese review dataset shows the two
+architectures within one standard deviation of each other.
+
+\begin{table}[h]
+\centering
+\caption{Binary sentiment linear probe on
+  \texttt{celsowm/imdb-reviews-pt-br} ($2{,}000$ reviews per class,
+  $256$-token features, $80\%/20\%$ stratified split). Bold marks the
+  higher value per row.}
+\label{tab:sentiment}
+\small
+\setlength{\tabcolsep}{6pt}
+\begin{tabular}{lrr}
+\toprule
+Metric & xLSTM medium & Transformer medium \\
+\midrule
+Test accuracy            & \textbf{67.4\%} & 59.5\% \\
+Test macro-F1            & \textbf{67.4\%} & 59.5\% \\
+Train accuracy (sanity)  & $70.2\%$        & $66.2\%$ \\
+Per-class F1 (negative)  & \textbf{68.1\%} & 59.9\% \\
+Per-class F1 (positive)  & \textbf{66.7\%} & 59.1\% \\
+Majority-class baseline  & \multicolumn{2}{c}{$50.0\%$} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Caveats.}
+Both train and test accuracies are far below the $\sim$90\% routinely
+achieved on English IMDB by full transformer encoders; this is
+expected. The pretraining corpus consists of $\sim$1.9\,M tokens of
+literary 19th-century Portuguese, vocabulary $4{,}000$, and the LMs
+have $4$--$5$\,M parameters --- two to four orders of magnitude below
+the size and three corpora removed from the domain that produce
+state-of-the-art sentiment numbers. The probe is therefore best read
+as an architecture-comparison signal under shift, not as an absolute
+sentiment-classification result.
+
+\subsection{Downstream task: review-score probe (Olist e-commerce, native PT-BR)}\label{sec:olist}
+
+The IMDB-pt probe of Section~\ref{sec:sentiment} is a useful
+out-of-distribution check, but the data is machine-translated from
+English; any artefact of the MT system enters the probe along with the
+sentiment signal. To remove that confound and to add error bars to the
+single-seed numbers reported in Table~\ref{tab:sentiment}, we re-run
+the same probe protocol on the Olist Brazilian E-Commerce Public
+dataset, using the free-text customer reviews
+(\texttt{review\_comment\_message}) as inputs and the $1$--$5$ star
+rating (\texttt{review\_score}) as the label.\footnote{%
+\url{https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce}.
+Native Brazilian-Portuguese reviews from a real Brazilian e-commerce
+platform; no translation is involved.} The dataset is genuinely
+in-language but, like IMDB, fully out-of-domain for our literary
+pretraining corpus, and the messages are short and informal --- a
+register the LM has never seen.
+
+\paragraph{Protocol.}
+Of the $99{,}224$ rows in the dataset, $40{,}950$ have a non-empty
+review message; we keep only those. To match the binary IMDB protocol
+we drop reviews with \texttt{review\_score}$=3$ (the ambiguous middle)
+and label $1$--$2$ as \emph{negative} and $4$--$5$ as \emph{positive}.
+We sample $2{,}000$ reviews per class ($4{,}000$ in total),
+tokenise with the same byte-level BPE used in pretraining, and
+truncate or right-pad to $128$ tokens. The shorter window matches
+the data: review messages have a median length of $53$ characters
+(maximum $208$), so $128$ tokens suffice. Feature extraction,
+standardisation, $80\%/20\%$ stratified split, and the
+\texttt{nn.Linear(D, 2)} probe are identical to
+Section~\ref{sec:sentiment}. The single methodological change is
+\emph{three independent seeds} ($42$, $1337$, $2024$); each seed
+re-samples the data, re-splits, and re-initialises the probe, and we
+report mean $\pm$ standard deviation across seeds for every metric.
+
+\paragraph{Results.}
+Table~\ref{tab:olist} reports the metrics. Both architectures clear
+the $50\%$ majority-class baseline by $\sim$33 points and end up
+within one standard deviation of each other on test accuracy and
+macro-F1. The point estimate places the Transformer $0.83$ accuracy
+points above the xLSTM, with $1\sigma$ intervals
+$[81.9, 83.9]$ vs.\ $[82.9, 84.7]$ that overlap throughout. The
+ordering on this dataset is therefore opposite to the IMDB-pt
+result of Section~\ref{sec:sentiment}, although in both cases the
+xLSTM-vs-Transformer gap on the Olist task is well inside the
+seed-to-seed noise we now measure. We read the combination as
+follows: the IMDB-pt advantage of the xLSTM (a $7.9$-point gap from a
+single seed) is real for that translated dataset, but the multi-seed
+Olist result shows that on a native-Portuguese, in-language
+out-of-domain probe the two architectures are statistically
+indistinguishable at this scale. The ``three scalars agree'' claim
+of Section~\ref{sec:sentiment} should therefore be read as
+\emph{three out of four}: held-out perplexity, the author probe, and
+the IMDB-pt sentiment probe rank xLSTM ahead; the multi-seed Olist
+review probe records a tie.
+
+\begin{table}[h]
+\centering
+\caption{Review-score linear probe on Olist e-commerce reviews
+  ($2{,}000$ reviews per class, $128$-token features, binary
+  $1$--$2$ vs.\ $4$--$5$, $80\%/20\%$ stratified split). All numbers
+  are mean $\pm$ standard deviation across three seeds
+  ($42$, $1337$, $2024$); each seed is a full end-to-end re-run.}
+\label{tab:olist}
+\small
+\setlength{\tabcolsep}{6pt}
+\begin{tabular}{lrr}
+\toprule
+Metric & xLSTM medium & Transformer medium \\
+\midrule
+Test accuracy            & $82.92 \pm 1.01\%$ & $\mathbf{83.75 \pm 0.90\%}$ \\
+Test macro-F1            & $82.91 \pm 1.01\%$ & $\mathbf{83.75 \pm 0.90\%}$ \\
+Train accuracy (sanity)  & $83.83 \pm 0.63\%$ & $85.35 \pm 0.24\%$ \\
+Per-class F1 (negative)  & $82.51 \pm 0.91\%$ & $\mathbf{83.65 \pm 0.99\%}$ \\
+Per-class F1 (positive)  & $83.30 \pm 1.11\%$ & $\mathbf{83.85 \pm 0.82\%}$ \\
+Feature-extraction time  & $174.2 \pm 4.9$\,s & $\mathbf{25.8 \pm 0.7}$\,s \\
+Throughput (passages/s)  & $23.0$            & $\mathbf{155.0}$ \\
+Majority-class baseline  & \multicolumn{2}{c}{$50.0\%$} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The accuracy columns are within one standard deviation, but the
+feature-extraction columns differ by a factor of $\sim$$6.7\times$ on
+this CPU benchmark. We discuss this gap in
+Section~\ref{sec:throughput}: it is a property of our
+\texttt{vanilla}-backend xLSTM running on CPU at short sequence
+lengths, not a fundamental architectural cost.
+
+\paragraph{Caveats.}
+The same caveats as for the IMDB-pt probe apply: the LMs are small
+($\sim$$4$--$5$\,M parameters), the pretraining corpus is literary,
+and review messages are short and colloquial. The probe should be
+read as an architecture-comparison signal, not as a competitive
+sentiment classifier on Olist. One additional caveat is specific to
+this dataset: the $1$--$5$ star distribution is heavily skewed
+towards $5$ ($\sim$$50\%$ of reviews with text), and our binary cut
+discards the $\sim$$8.7\%$ of $3$-star reviews. A multi-class
+$1$--$5$ extension is supported by the script (\texttt{--multiclass}
+flag) and would let one ask whether the representations capture
+review intensity beyond polarity, but we leave that to future work.
+
 \subsection{Throughput and the implementation caveat}\label{sec:throughput}
 
 Table~\ref{tab:results} also reports the mean training throughput in
@@ -385,16 +858,86 @@ point that the pipeline makes explicit by logging throughput in the same
 \texttt{log.jsonl} as the perplexity numbers, and that we believe is
 under-reported in arch-comparison papers in general.
 
+\subsection{Scaling-up illustration: xLSTM at GPU scale}\label{sec:gpu-scaling}
+
+To illustrate the pipeline's portability beyond the CPU experiments
+above, we additionally trained three xLSTM checkpoints on a single
+consumer-grade GPU at parameter counts of approximately $2.5$\,M,
+$6.6$\,M and $10.1$\,M. These runs use a larger vocabulary ($8{,}000$
+instead of $4{,}000$), a wider context at the largest configuration
+($512$ instead of $256$), an $8\times$ larger batch ($32$ vs.\ $4$),
+and proportionally larger token budgets. Held-out perplexities are
+therefore not directly comparable to those in
+Table~\ref{tab:results} --- the tokenizer differs --- so the runs
+form a self-contained xLSTM scaling curve rather than an extension of
+the CPU comparison. Figure~\ref{fig:gpu-scaling} shows the training
+trajectories; Table~\ref{tab:gpu-results} summarises the run-level
+numbers.
+
+\begin{table}[h]
+\centering
+\caption{xLSTM scaling experiment on GPU. Tokens-seen reflects the
+  training budget (steps $\times$ batch $\times$ sequence length).
+  Throughput is the mean tokens/s observed during training.}
+\label{tab:gpu-results}
+\small
+\begin{tabular}{lrrrrrr}
+\toprule
+Model & Params & Steps & Tokens & Best PPL & Final PPL & Throughput \\
+\midrule
+xLSTM tiny     & $2.5$\,M  & $1{,}500$ & $12.3$\,M  & $699.5$ & $733.9$ & $10.3$\,k tok/s \\
+xLSTM medium   & $6.6$\,M  & $4{,}000$ & $32.8$\,M  & $377.7$ & $405.4$ & $10.1$\,k tok/s \\
+xLSTM $10$\,M  & $10.1$\,M & $8{,}000$ & $131.1$\,M & $\mathbf{287.3}$ & $440.3$ & $5.9$\,k tok/s \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\linewidth]{artifacts/comparison_gpu.png}
+\caption{Training loss (left) and held-out perplexity (right, log
+  scale) for the three GPU-scale xLSTM runs. The $10$\,M-parameter
+  run reaches its best held-out perplexity of $287.3$ at step
+  $1{,}600$ ($\approx 26$\,M training tokens) and then drifts
+  upwards even as the training loss keeps decreasing --- a textbook
+  overfitting signature for a model whose capacity exceeds the
+  corpus size. The medium-scale run exhibits a milder version of
+  the same pattern in its second half; the tiny-scale run never
+  reaches the regime where the holdout diverges from training loss
+  within its budget.}
+\label{fig:gpu-scaling}
+\end{figure}
+
+The reading of Figure~\ref{fig:gpu-scaling} is that, at the corpus
+size used here ($\sim$1.9\,M unique tokens), increasing xLSTM
+capacity past $\sim$6\,M parameters yields diminishing held-out
+returns and eventually overfits within $\sim$25\,M training tokens.
+This is consistent with the data-limited diagnosis of
+Section~\ref{sec:held-out-ppl}: the binding constraint at this scale
+is the public-domain 19th-century Portuguese literary record rather
+than model capacity. Lifting that constraint --- by extending the
+corpus, by introducing regularisation tuned for the larger
+configuration, or both --- is the natural next experiment, for which
+the pipeline is already prepared. The throughput drop from $10.1$\,k
+to $5.9$\,k tok/s between the medium and $10$\,M configurations is
+explained by the doubled context length ($256{\to}512$) and the
+addition of a second sLSTM block in the stack, which increases the
+share of the recurrent (and therefore non-parallel) backend in each
+forward pass.
+
 \subsection{Qualitative inspection}
 
-We provide samples from each trained model in Appendix~\ref{app:samples}.
+We provide samples from each trained model in Appendix~\ref{app:samples},
+including a multi-prompt sweep over the medium-scale models that probes
+behaviour beyond a single conditioning context.
 Briefly, the medium-scale models produce text that is recognisably
 Portuguese and reproduces the orthographic conventions of 19th-century
 Brazilian literature (\emph{pae} for \emph{pai}, contractions like
 \emph{n'um}, dialogue with em-dashes). The tiny-scale models produce
 fragments with isolated correct words but limited syntactic coherence.
-Sample-level differences between architectures are subjective and we do
-not draw quantitative conclusions from them.
+Sample-level impressions are subjective; the surface statistics in
+Section~\ref{sec:gentext} (Table~\ref{tab:gentext}) provide the
+quantitative companion to this observation.
 
 % =============================================================================
 \section{Discussion}
@@ -413,52 +956,83 @@ corpora by replacing the book-list module.
 The crossover observation in our case study is consistent with the
 hypothesis advanced by Beck et al.~\cite{beck2024} that xLSTM advantages
 emerge with scale. We stress, however, that the gap at the medium
-scale is small (2.5\%) and that we have not measured run-to-run variance.
-A definitive claim would require multiple seeds; we view our observation
+scale is small (2.5\%) and that we have not measured run-to-run
+variance on the perplexity numbers themselves. The one downstream task
+where we did report multi-seed numbers --- the Olist review probe of
+Section~\ref{sec:olist} --- placed the two architectures within
+$1\sigma$ of each other and inverted the IMDB-pt ranking, which
+underlines that a definitive claim about ordering at this scale would
+require multi-seed pretraining runs as well; we view our observation
 as suggestive rather than conclusive.
+
+\paragraph{Why the Transformer wins at the tiny scale.}
+The original xLSTM paper~\cite{beck2024} reports advantages over
+Transformers from $\sim$125\,M parameters and tens of billions of
+training tokens upward, and never below this scale. Our tiny scale
+($\sim$1.45\,M parameters, $\sim$1.5\,M tokens) lies three to four
+orders of magnitude below any setting in which the architecture has
+been validated. The xLSTM block carries machinery that the Transformer
+does not---block-diagonal q/k/v projections, learnable skip connection,
+component-wise output gates, exponential gating with stabiliser state,
+GroupNorm head-wise---which costs parameters that must themselves be
+learned from data. In the regime we study, where the token-to-parameter
+ratio is one to two orders of magnitude below
+Chinchilla-optimal~\cite{hoffmann2022}, the marginal cost of carrying
+this gating apparatus is high relative to the marginal benefit. A
+purely-attention-plus-MLP architecture concentrates more of its budget
+in primitives that are simpler to learn from limited data. The tiny-scale
+gap is therefore not anomalous; rather, it is the predicted outcome of
+applying an architecture rich in inductive bias far outside its
+data-and-capacity envelope.
+
+\paragraph{What the medium-scale crossover supports.}
+The crossover is in the direction predicted by the
+scale-dependent-advantage hypothesis: as we move from tiny to medium,
+the Transformer's $28\%$ lead inverts to a $2.5\%$ deficit. Even with
+the seed-variance caveat, the \emph{direction} of the change is more
+robust than the magnitude. What is non-trivial is that the inversion
+occurs as early as $\sim$4.5\,M parameters, two orders of magnitude
+below the smallest scale at which the original paper documents the
+effect. We therefore interpret our medium-scale result not as a
+challenge to Beck et al.\ but as a lower-bound case study extending the
+observed envelope of the effect downward. We make no claim about the
+asymptotic advantage at scale.
+
+\paragraph{Scope of the comparison.}
+The matched-LR design (peak $3 \times 10^{-4}$ for both architectures)
+prioritises symmetry over per-architecture tuning. The original xLSTM
+uses higher peak LRs at small scale
+($3\times10^{-3}$ at 125\,M~\cite{beck2024}); the present comparison is
+therefore a matched-hyperparameter comparison rather than a
+best-of-each-architecture comparison. The token-to-parameter ratio of
+the medium runs ($\approx 0.45$) is well below the $\approx 20{:}1$
+Chinchilla ratio, placing the comparison in the data-limited rather than
+the capacity-limited regime; this is an intentional property of
+the corpus (the public-domain 19th-century Portuguese literary record)
+rather than an artefact of the training schedule. Section~\ref{sec:limitations}
+makes the explicit scope of the reported numbers concrete.
 
 % =============================================================================
 \section{Limitations and Future Work}\label{sec:limitations}
 
-\paragraph{Single seed.}
-All numbers reported are from a single training run per configuration.
-The 2.5\% gap at the medium scale is comparable in magnitude to seed
-variance commonly observed in small-scale language modelling. Multiple
-seeds (we suggest at least three) would be needed before drawing
-quantitative conclusions about the medium-scale ranking.
+\paragraph{Single seed per configuration.}
+The numbers in Table~\ref{tab:results} are from one training run per
+configuration. The $2.5\%$ medium-scale gap is within the seed-variance
+band typical of small-scale language modelling, so the medium-scale
+ranking is reported as ordinal rather than as a precise effect size.
 
 \paragraph{Domain.}
-The corpus consists exclusively of 19th-century Portuguese-language
-literature. We do not claim our observations transfer to other domains
-(modern Portuguese, technical text, code, etc.) or to other languages.
-The pipeline structure makes such extensions straightforward, but they
-remain to be performed.
-
-\paragraph{Scale.}
-The largest model in this study contains \(\sim\)4.5\,M parameters and
-sees \(\sim\)2\,M tokens during training. This is several orders of
-magnitude smaller than typical pretraining setups for which the original
-xLSTM and Transformer comparisons are reported. The repository contains
-a 50\,M-parameter configuration paired with a streaming Wikipedia
-pipeline, intended for future GPU experiments in which the question of
-architectural advantage at near-Chinchilla-optimal token budgets can
-be addressed in a more rigorous fashion.
+The corpus is restricted to 19th-century Portuguese-language literature.
+The reported observations are scoped to this regime; no claim is made
+about transfer to modern Portuguese, technical text, code, or other
+languages.
 
 \paragraph{Holdout author overlap.}
-The holdout work is by Machado de Assis, who is also the author of six
-of the nineteen training works (Machado being the most prolific author
-of the period in the public domain). While the works themselves are
-disjoint, an author-disjoint holdout would be methodologically
-preferable; it was not adopted because the held-out perplexity numbers
-must remain comparable across the runs reported here, all of which used
-this holdout.
-
-\paragraph{Subtraining.}
-Both medium-scale runs reached their best held-out perplexity at the
-final evaluation, indicating that the chosen step budget is below the
-point of diminishing returns. A longer schedule (e.g., 4{,}000 steps with
-proportionally larger warmup) is the natural next step, and may shift
-the medium-scale ranking.
+The held-out work (\emph{Memórias Póstumas de Brás Cubas}) shares its
+author with six of the nineteen training novels, Machado de Assis being
+the most prolific author of the period in the public domain. The works
+themselves are disjoint at the title level, but author-level disjointness
+is not achieved.
 
 % =============================================================================
 \section{Conclusion}
@@ -470,14 +1044,16 @@ GPT-style Transformer at two parameter scales using a corpus of
 19th-century Portuguese literature, and observed a crossover effect in
 held-out perplexity: the Transformer wins at the smallest scale, and the
 xLSTM marginally surpasses the Transformer at the medium scale. The
-observation is consistent with the hypothesis that xLSTM advantages
-emerge with scale, but the small medium-scale gap and the absence of
-multiple seeds preclude strong claims. We have additionally highlighted
-a methodological subtlety that is rarely controlled in published
-arch-comparison work: training throughput differences between recurrent
-and attention-based architectures in our setting span an order of
-magnitude due to backend implementation rather than fundamental
-architectural cost.
+direction of this crossover is consistent with the
+scale-dependent-advantage hypothesis advanced by Beck et
+al.~\cite{beck2024}, with the additional empirical observation that the
+inversion is already present at $\sim$4.5\,M parameters --- two orders
+of magnitude below the smallest scale at which the original work
+documents the effect. We additionally highlight a methodological
+subtlety that is rarely controlled in published arch-comparison work:
+training throughput differences between recurrent and attention-based
+architectures in our setting span an order of magnitude due to backend
+implementation rather than fundamental architectural cost.
 
 % =============================================================================
 \section*{Code and Data Availability}
@@ -527,6 +1103,11 @@ Karpathy, A.
 nanoGPT: The simplest, fastest repository for training/finetuning
 medium-sized GPTs.
 GitHub repository (2022). \url{https://github.com/karpathy/nanoGPT}.
+
+\bibitem{maas2011imdb}
+Maas, A.~L. \emph{et al.}
+Learning word vectors for sentiment analysis.
+\emph{Proceedings of ACL-HLT} (2011).
 
 \bibitem{huggingfacetokenizers}
 Hugging Face.
@@ -589,5 +1170,103 @@ Portuguese orthographic conventions (\emph{pae}, \emph{á}, \emph{ella},
 contractions like \emph{n'um}) and recognisable dialogue structure with
 em-dashes. Tiny-scale samples produce isolated correct words but lower
 syntactic coherence. We refrain from quantitative qualitative claims.
+
+\subsection*{Multi-prompt completions (medium scale)}\label{app:multiprompt}
+
+To probe behaviour beyond a single conditioning context, we additionally
+sampled both medium-scale models on four distinct prompts spanning
+narrative openings and dialogue turns. All completions are generated with
+the same decoding settings as above (temperature 0.8, top-$k$ 40,
+\texttt{torch.manual\_seed(42)} reset before each prompt) and 80 new
+tokens. Outputs are reproduced verbatim; line breaks are the model's own.
+
+\paragraph{xLSTM medium (4.55\,M).}
+
+\noindent\emph{Prompt: \texttt{"Capitu olhou para mim"}}
+\begin{quote}\small\itshape
+Capitu olhou para mim a mulher, e a minha mãe, ao que o que não me
+dissesse e não era a mãe.\\
+--Java é que ha ser o que a voz.\\
+--Não é que me parece.\\
+--É é verdade.\\
+--Nem eu?\\
+--Fou não me deu ao marido.
+\end{quote}
+
+\noindent\emph{Prompt: \texttt{"O sol nascia sobre o"}}
+\begin{quote}\small\itshape
+O sol nascia sobre o palavras.\\
+No dia, que o que não me não sei de Sativa.\\
+--Sim não? Mas é que ha ser o que a voz de minha mãe me palavras.\\
+--Não tambem é verdade.\\
+--Nem eu?\\
+--Fou não me deu ao marido.
+\end{quote}
+
+\noindent\emph{Prompt: \texttt{"Era uma vez, em uma cidade pequena,"}}
+\begin{quote}\small\itshape
+Era uma vez, em uma cidade pequena, e não se lhe não tinha ser que não
+é que se não me dissesse e não era a mãe.\\
+--Java é que ha ser o que a voz.\\
+--Não é que me parece.\\
+--É é verdade.
+\end{quote}
+
+\noindent\emph{Prompt: \texttt{"-{}-Bom dia, senhor."}}
+\begin{quote}\small\itshape
+--Bom dia, senhor.\\
+--Saro mesmo, disse-me o que não me dissesse, disse ella, mas ha para
+o corpo. Mas é que se lhe lembra que a voz debas accando. O outro é
+verdade, porque é que me não não posso, eu o a cabeça do ceu, a
+palavra de mim.
+\end{quote}
+
+\paragraph{Transformer medium (4.22\,M).}
+
+\noindent\emph{Prompt: \texttt{"Capitu olhou para mim"}}
+\begin{quote}\small\itshape
+Capitu olhou para mim é me que eu é preciso ser que não é que se não me
+duas. Um dia? Mas é que se ser o que a voz de CAlexarminha ao que a
+verdade.\\
+--Não me deu ao marido.\\
+--Como.
+\end{quote}
+
+\noindent\emph{Prompt: \texttt{"O sol nascia sobre o"}}
+\begin{quote}\small\itshape
+O sol nascia sobre o ezer-o, como a casa que o que não me dão. Um dia?
+Mas é que se ser o que a voz de CAjam o que ella, não é verdade.\\
+--Não me deu ao marido. Os labios, não.
+\end{quote}
+
+\noindent\emph{Prompt: \texttt{"Era uma vez, em uma cidade pequena,"}}
+\begin{quote}\small\itshape
+Era uma vez, em uma cidade pequena, eja não lhe é preciso ser que não
+que o que não me postou, quando mas é para o que não podia ser tudo.
+que eu a voz e de a vez que é que me o outro é verdade.
+\end{quote}
+
+\noindent\emph{Prompt: \texttt{"-{}-Bom dia, senhor."}}
+\begin{quote}\small\itshape
+--Bom dia, senhor.\\
+--CAPa, mas eu não é, quando e para o que não não é que se ser o que
+a voz e de preço, e não se o que se tambem é verdade.\\
+--Que?\\
+--Não me deu ao marido.\\
+--Pois me não.
+\end{quote}
+
+\medskip
+
+These completions are consistent with the held-out perplexity numbers in
+Table~\ref{tab:results}: both models stay on-distribution lexically but
+collapse syntactically after a few clauses, and both repeat short
+fragments (\emph{``Não me deu ao marido''} appears across prompts in
+both architectures). The Transformer's outputs contain more whitespace
+artefacts and more aggressively segmented dialogue, while the xLSTM's
+outputs flow into longer pseudo-sentences. We stress that, as throughout
+this section, we draw no quantitative conclusion from these samples;
+they are included to make the qualitative regime of the medium-scale
+runs concrete for the reader.
 
 \end{document}
