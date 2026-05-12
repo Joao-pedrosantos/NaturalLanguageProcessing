@@ -72,7 +72,7 @@
 
 \author[1]{João~Pedro~Rodrigues~dos~Santos}
 \affil[1]{Computer Engineering, Insper, São Paulo, Brazil}
-\date{April 2026}
+\date{May 2026}
 
 % =============================================================================
 \begin{document}
@@ -85,20 +85,31 @@ Fair comparison of neural network architectures is difficult: differences in
 tokenizers, hyperparameters, data preparation, and infrastructure routinely
 conflate with architectural differences in published comparisons. This paper
 presents an open-source pipeline designed to isolate architecture as the
-sole variable in language modelling experiments at extremely small scales
-(1--5\,M parameters, 1--2\,M training tokens). The pipeline standardises raw-text
-ingestion, byte-level BPE tokenizer training, model construction, training,
-and deterministic perplexity evaluation across user-supplied architectures.
-We illustrate the pipeline by comparing xLSTM~\cite{beck2024} and a GPT-style
-Transformer at two parameter scales, using nineteen 19th-century Portuguese novels
-from Project Gutenberg as the training corpus. We observe a crossover:
-the Transformer outperforms the xLSTM at the smallest scale, while the
-xLSTM marginally surpasses the Transformer at the medium scale. We
+sole variable in language modelling experiments at small scales
+($1$--$10$\,M parameters, $1.5$--$130$\,M training tokens). The pipeline
+standardises raw-text ingestion, byte-level BPE tokenizer training, model
+construction, training, and deterministic perplexity evaluation across
+user-supplied architectures. We illustrate the pipeline by comparing
+xLSTM~\cite{beck2024} and a GPT-style Transformer at five parameter scales
+across two hardware regimes (CPU and GPU), using nineteen 19th-century
+Portuguese novels from Project Gutenberg as the training corpus, and
+complement perplexity with three downstream linear-probe tasks: author
+classification (in-domain), sentiment classification on a
+MarianMT~\cite{junczys2018marian,tiedemann2020opus} machine-translated
+subset of IMDB~\cite{maas2011imdb}, and review-score classification on
+native-Portuguese Olist e-commerce data. We observe a scale-dependent
+crossover in held-out perplexity: the Transformer wins at the smallest
+scale, the xLSTM wins at the CPU medium scale, the Transformer wins again
+at $10$\,M parameters on GPU, where it however overfits less aggressively
+than the xLSTM. On the downstream probes, the xLSTM leads on author
+classification and on translated IMDB sentiment, while the two architectures
+are at statistical parity on native-Portuguese Olist sentiment. We
 emphasise a methodological caveat that is rarely controlled in published
-comparisons: training throughput between the two architectures in our setting
-differs by an order of magnitude due to implementation choices, not
-architectural cost. The pipeline is released as open-source software, ready
-for extension to additional architectures, corpora, and scales.
+comparisons: training throughput between the two architectures in our
+setting differs by $\sim$$5$--$8\times$ on CPU and by $\sim$$45$--$80\times$
+on GPU due to implementation choices, not architectural cost. The pipeline
+is released as open-source software, ready for extension to additional
+architectures, corpora, and scales.
 \end{abstract}
 
 % =============================================================================
@@ -149,10 +160,15 @@ experiments. The pipeline standardises every other component:
         cross-run aggregation and plotting.
 \end{itemize}
 As a secondary contribution, we apply the pipeline to xLSTM and a
-GPT-style Transformer at two parameter scales (\(\sim\)1.5\,M and
-\(\sim\)4.5\,M) and report empirical observations. These observations
-are intentionally framed as an illustration of the pipeline rather than
-as definitive claims about architectural superiority.
+GPT-style Transformer at five parameter scales across two hardware
+regimes (CPU: $\sim$$1.5$\,M and $\sim$$4.5$\,M; GPU: $\sim$$2.5$\,M,
+$\sim$$6.5$\,M, and $\sim$$10$\,M), pairing held-out perplexity with
+three linear-probe downstream tasks (author classification, sentiment
+on machine-translated IMDB-PT, review-score on native-Portuguese Olist
+e-commerce data), and report empirical observations. These
+observations are intentionally framed as an illustration of the
+pipeline rather than as definitive claims about architectural
+superiority.
 
 % =============================================================================
 \section{Related Work}
@@ -393,9 +409,10 @@ and the latter because it characterises end-of-training behaviour.
 \subsection{Held-out perplexity}\label{sec:held-out-ppl}
 
 Table~\ref{tab:results} reports best and final dev perplexity along with
-training throughput for the four configurations. Figure~\ref{fig:scaling}
-shows training loss and held-out perplexity over training steps for all
-four runs.
+training throughput for the four configurations.
+Table~\ref{tab:ppltrajectory} reports the held-out perplexity at fixed
+training steps for the same four runs, so that the convergence behaviour
+can be inspected at the same temporal grid across configurations.
 
 \begin{table}[h]
 \centering
@@ -416,26 +433,14 @@ Transformer medium & 4.22\,M & 235.6 & 235.6 & 8.6\,k tok/s \\
 \end{tabular}
 \end{table}
 
-\begin{figure}[h]
-\centering
-\includegraphics[width=\linewidth]{scaling_curve.png}
-\caption{Training loss (left) and held-out perplexity (right, log scale)
-  for the four model--scale combinations across training steps. Tiny
-  models train for 1{,}500 steps; medium models for 2{,}000 steps.}
-\label{fig:scaling}
-\end{figure}
-
-To accompany Figure~\ref{fig:scaling}, Table~\ref{tab:ppltrajectory}
-reports the held-out perplexity at fixed checkpoints during training for
-all four runs. The trajectories make several patterns visible that are
-hard to read off the log-scale figure: (i)~the convergence is monotone
-with intermittent transient spikes (e.g.\ xLSTM tiny at step~300, both
-tiny runs at step~900 — the latter coincides with the cosine decay
-beginning), (ii)~at every checkpoint past step~600 the medium models
-dominate their tiny counterparts, and (iii)~the medium-scale crossover
-between architectures emerges only past step~1200, with the xLSTM and
-Transformer crossing one another twice (steps~1400 and~1800) before
-settling at step~2000.
+Three patterns are visible in Table~\ref{tab:ppltrajectory}: (i)~the
+convergence is monotone with intermittent transient spikes (e.g.\ xLSTM
+tiny at step~300, both tiny runs at step~900 --- the latter coincides
+with the cosine decay beginning); (ii)~at every checkpoint past
+step~600, the medium models dominate their tiny counterparts; (iii)~the
+medium-scale crossover between architectures emerges only past
+step~1200, with the xLSTM and Transformer crossing one another twice
+(steps~1400 and~1800) before settling at step~2000.
 
 \begin{table}[h]
 \centering
@@ -843,87 +848,284 @@ review intensity beyond polarity, but we leave that to future work.
 \subsection{Throughput and the implementation caveat}\label{sec:throughput}
 
 Table~\ref{tab:results} also reports the mean training throughput in
-tokens per second. The Transformer trains roughly 5--8$\times$ faster
-than the xLSTM in our setting. We emphasise that this is \emph{not} a
+tokens per second. The Transformer trains roughly $5$--$8\times$ faster
+than the xLSTM in our CPU setting; on GPU, the gap widens to
+$\sim$$45$--$80\times$ (see Section~\ref{sec:gpu-scaling} and
+Table~\ref{tab:gpu-results}). We emphasise that this is \emph{not} a
 fundamental architectural cost. The reported numbers reflect the use of
 the \texttt{vanilla} (pure PyTorch) xLSTM backend; the dedicated CUDA
 kernels of the official xLSTM implementation, which parallelise the
 recurrence via a custom scan operation, would close most of this gap on
 GPU. Conversely, the Transformer benefits substantially in CPU from the
 fused \texttt{F.scaled\_dot\_product\_attention} kernel, which exploits
-SIMD/AVX in a way that the loop-based recurrent path does not.
+SIMD/AVX in a way that the loop-based recurrent path does not; on GPU
+the same kernel dispatches to FlashAttention~\cite{dao2022flashattention},
+amplifying the effect.
 
 This implementation-versus-architecture distinction is a methodological
 point that the pipeline makes explicit by logging throughput in the same
 \texttt{log.jsonl} as the perplexity numbers, and that we believe is
-under-reported in arch-comparison papers in general.
+under-reported in arch-comparison papers in general. We return to it
+quantitatively in Section~\ref{sec:gpu-scaling}, where the GPU
+throughput numbers make the implementation-versus-architecture gap
+$\sim$$10\times$ larger than it appears on CPU.
 
-\subsection{Scaling-up illustration: xLSTM at GPU scale}\label{sec:gpu-scaling}
+\subsection{GPU-scale architecture comparison}\label{sec:gpu-scaling}
 
-To illustrate the pipeline's portability beyond the CPU experiments
-above, we additionally trained three xLSTM checkpoints on a single
-consumer-grade GPU at parameter counts of approximately $2.5$\,M,
-$6.6$\,M and $10.1$\,M. These runs use a larger vocabulary ($8{,}000$
-instead of $4{,}000$), a wider context at the largest configuration
-($512$ instead of $256$), an $8\times$ larger batch ($32$ vs.\ $4$),
-and proportionally larger token budgets. Held-out perplexities are
-therefore not directly comparable to those in
-Table~\ref{tab:results} --- the tokenizer differs --- so the runs
-form a self-contained xLSTM scaling curve rather than an extension of
-the CPU comparison. Figure~\ref{fig:gpu-scaling} shows the training
-trajectories; Table~\ref{tab:gpu-results} summarises the run-level
-numbers.
+To extend the comparison beyond the CPU regime studied in
+Sections~\ref{sec:held-out-ppl}--\ref{sec:olist}, we ran \emph{both}
+architectures on a single consumer-grade GPU (NVIDIA RTX~5070~Ti,
+Compute Capability $12.0$) at three parameter scales: $\sim$$2.5$\,M,
+$\sim$$6.3$--$6.6$\,M, and $\sim$$10$\,M. The GPU runs use a larger
+vocabulary ($8{,}000$ instead of $4{,}000$), wider context at the
+$10$\,M scale ($512$ instead of $256$), an $8\times$ larger batch
+($32$ vs.\ $4$), and proportionally larger token budgets ($1{,}500$,
+$4{,}000$, $8{,}000$ steps). The tokenizer differs from the CPU
+experiments, so the GPU perplexities are not directly comparable to
+Table~\ref{tab:results}; the runs form a self-contained GPU sweep.
+
+\paragraph{Held-out perplexity.}
+Table~\ref{tab:gpu-results} reports best and final held-out
+perplexity together with mean training throughput.
+Figure~\ref{fig:gpu-scaling} shows the training trajectories. Three
+observations follow. First, the Transformer attains the lowest best
+perplexity at the $10$\,M scale ($269.3$ vs.\ xLSTM $287.3$, a $6\%$
+relative advantage). Second, the cross-architecture ordering is
+\emph{non-monotone in scale}: the Transformer wins at tiny by a
+$23\%$ margin, the xLSTM marginally surpasses the Transformer at
+medium by $9\%$, and the Transformer regains the lead at $10$\,M.
+Third, the xLSTM $10$\,M run reaches its best perplexity at step
+$1{,}600$ of $8{,}000$ ($20\%$ into the schedule) and drifts
+upwards by $53\%$ thereafter, while the Transformer $10$\,M run
+keeps improving until step $4{,}400$ and finishes with a far milder
+final-vs-best ratio ($1.20$ vs.\ $1.53$). The xLSTM at $10$\,M is
+therefore the only configuration in our sweep that visibly overfits
+the corpus. Figure~\ref{fig:best-ppl-vs-params} plots the best dev
+perplexity as a function of parameter count, making the two
+crossovers and the relative compactness of the $10$\,M gap easier
+to read off than from Table~\ref{tab:gpu-results} alone.
 
 \begin{table}[h]
 \centering
-\caption{xLSTM scaling experiment on GPU. Tokens-seen reflects the
+\caption{GPU-scale architecture comparison. Tokens-seen reflects the
   training budget (steps $\times$ batch $\times$ sequence length).
-  Throughput is the mean tokens/s observed during training.}
+  Throughput is the mean tokens/s observed during training, with the
+  first measurement excluded as warmup. Best-of-pair values per row
+  are in bold.}
 \label{tab:gpu-results}
 \small
+\setlength{\tabcolsep}{4pt}
 \begin{tabular}{lrrrrrr}
 \toprule
 Model & Params & Steps & Tokens & Best PPL & Final PPL & Throughput \\
 \midrule
-xLSTM tiny     & $2.5$\,M  & $1{,}500$ & $12.3$\,M  & $699.5$ & $733.9$ & $10.3$\,k tok/s \\
-xLSTM medium   & $6.6$\,M  & $4{,}000$ & $32.8$\,M  & $377.7$ & $405.4$ & $10.1$\,k tok/s \\
-xLSTM $10$\,M  & $10.1$\,M & $8{,}000$ & $131.1$\,M & $\mathbf{287.3}$ & $440.3$ & $5.9$\,k tok/s \\
+xLSTM tiny          & $2.5$\,M  & $1{,}500$ & $12.3$\,M  & $699.5$ & $733.9$ & $10.3$\,k tok/s \\
+Transformer tiny    & $2.5$\,M  & $1{,}500$ & $12.3$\,M  & $\mathbf{539.3}$ & $814.7$ & $\mathbf{702.1}$\,k tok/s \\
+xLSTM medium        & $6.6$\,M  & $4{,}000$ & $32.8$\,M  & $\mathbf{377.7}$ & $\mathbf{405.4}$ & $10.1$\,k tok/s \\
+Transformer medium  & $6.3$\,M  & $4{,}000$ & $32.8$\,M  & $413.0$ & $418.4$ & $\mathbf{450.5}$\,k tok/s \\
+xLSTM $10$\,M       & $10.1$\,M & $8{,}000$ & $131.1$\,M & $287.3$ & $440.3$ & $5.9$\,k tok/s \\
+Transformer $10$\,M & $10.2$\,M & $8{,}000$ & $131.1$\,M & $\mathbf{269.3}$ & $\mathbf{322.4}$ & $\mathbf{471.2}$\,k tok/s \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \begin{figure}[h]
 \centering
-\includegraphics[width=\linewidth]{artifacts/comparison_gpu.png}
+\includegraphics[width=\linewidth]{gpu_arch_curve.png}
 \caption{Training loss (left) and held-out perplexity (right, log
-  scale) for the three GPU-scale xLSTM runs. The $10$\,M-parameter
-  run reaches its best held-out perplexity of $287.3$ at step
-  $1{,}600$ ($\approx 26$\,M training tokens) and then drifts
-  upwards even as the training loss keeps decreasing --- a textbook
-  overfitting signature for a model whose capacity exceeds the
-  corpus size. The medium-scale run exhibits a milder version of
-  the same pattern in its second half; the tiny-scale run never
-  reaches the regime where the holdout diverges from training loss
-  within its budget.}
+  scale) for the six GPU-scale runs (xLSTM and Transformer at
+  $2.5$\,M, $\sim$$6.5$\,M, and $\sim$$10$\,M parameters). The
+  $10$\,M xLSTM trajectory (green) is the only one in which the
+  held-out perplexity diverges \emph{upward} from the training loss
+  past step $\sim$$2{,}000$ --- the textbook overfitting signature.}
 \label{fig:gpu-scaling}
 \end{figure}
 
-The reading of Figure~\ref{fig:gpu-scaling} is that, at the corpus
-size used here ($\sim$1.9\,M unique tokens), increasing xLSTM
-capacity past $\sim$6\,M parameters yields diminishing held-out
-returns and eventually overfits within $\sim$25\,M training tokens.
-This is consistent with the data-limited diagnosis of
-Section~\ref{sec:held-out-ppl}: the binding constraint at this scale
-is the public-domain 19th-century Portuguese literary record rather
-than model capacity. Lifting that constraint --- by extending the
-corpus, by introducing regularisation tuned for the larger
-configuration, or both --- is the natural next experiment, for which
-the pipeline is already prepared. The throughput drop from $10.1$\,k
-to $5.9$\,k tok/s between the medium and $10$\,M configurations is
-explained by the doubled context length ($256{\to}512$) and the
-addition of a second sLSTM block in the stack, which increases the
-share of the recurrent (and therefore non-parallel) backend in each
-forward pass.
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.78\linewidth]{best_ppl_vs_params.png}
+\caption{Best held-out perplexity as a function of parameter count for
+  the GPU sweep. The two architectures cross twice across the swept
+  range: the Transformer leads at $2.5$\,M, the xLSTM leads at
+  $\sim$$6.5$\,M, the Transformer regains the lead at $10$\,M. The
+  shaded band marks the medium-scale crossover.}
+\label{fig:best-ppl-vs-params}
+\end{figure}
+
+\paragraph{Throughput on GPU: an $\sim$$80\times$ gap.}
+The Throughput column of Table~\ref{tab:gpu-results} exposes a
+\emph{$\sim$$45$--$80\times$} speed gap between architectures on
+GPU. At the $10$\,M scale the Transformer processes $471.2$\,k
+tokens/s while the xLSTM processes $5.9$\,k tokens/s, a ratio of
+$80\times$; at the medium and tiny scales the ratios are
+$45\times$ and $68\times$ respectively. This dwarfs the
+$5$--$8\times$ CPU gap of Section~\ref{sec:throughput}. The
+asymmetry is implementation-driven, not architectural: PyTorch
+dispatches \texttt{F.scaled\_dot\_product\_attention} to
+FlashAttention~\cite{dao2022flashattention} on supported
+GPUs --- a memory-IO-aware, kernel-fused attention path against
+which our \texttt{vanilla} pure-PyTorch xLSTM backend has no
+equivalent. The dedicated CUDA kernels of the official xLSTM
+release~\cite{beck2024} would close most of this gap but require a
+higher Compute Capability than the CUDA build available to us. The
+methodological point of Section~\ref{sec:throughput} is therefore
+\emph{amplified}, not weakened, on GPU: at the scales we study, a
+$6\%$ perplexity advantage in favour of the Transformer comes
+alongside a $\sim$$80\times$ wall-clock advantage for the
+Transformer, and the two numbers must be read together.
+Figure~\ref{fig:throughput} visualises the gap on a log scale.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.80\linewidth]{throughput_bars.png}
+\caption{GPU training throughput (mean tokens/s, log scale) per
+  architecture and scale on the NVIDIA RTX~5070~Ti. Ratios above the
+  Transformer bars give the per-scale speedup
+  (Transformer / xLSTM\,vanilla). The xLSTM throughput drops from
+  $10$\,k to $5.9$\,k tok/s between medium and $10$\,M because the
+  $10$\,M configuration doubles the context length and adds a second
+  sLSTM block.}
+\label{fig:throughput}
+\end{figure}
+
+\paragraph{Downstream: author probe on GPU checkpoints.}
+We rerun the linear-probe protocol of Section~\ref{sec:probe} on
+the medium and $10$\,M GPU checkpoints. The dataset, protocol
+($9$ authors, $400$ passages each, $128$-token windows, $80/20$
+stratified split, mean-pooled features, \texttt{nn.Linear}
+probe), and majority baseline ($11.1\%$) are unchanged.
+Table~\ref{tab:probe-gpu} reports accuracy and macro-F1.
+
+\begin{table}[h]
+\centering
+\caption{Author-classification linear probe on the GPU-scale
+  checkpoints (same protocol as Table~\ref{tab:probe}; majority
+  baseline $11.1\%$). Bold marks the higher value per scale.}
+\label{tab:probe-gpu}
+\small
+\setlength{\tabcolsep}{6pt}
+\begin{tabular}{lrr}
+\toprule
+Model & Test acc. & Test macro-F1 \\
+\midrule
+xLSTM medium        & $\mathbf{66.11\%}$ & $\mathbf{66.07\%}$ \\
+Transformer medium  & $64.17\%$          & $63.95\%$          \\
+\midrule
+xLSTM $10$\,M       & $\mathbf{68.06\%}$ & $\mathbf{67.77\%}$ \\
+Transformer $10$\,M & $65.83\%$          & $65.71\%$          \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The xLSTM leads at both medium and $10$\,M scales (by $1.94$ and
+$2.23$ accuracy points respectively). The direction matches the
+CPU result of Table~\ref{tab:probe} but the magnitude is smaller,
+consistent with the larger GPU training budget reducing the
+probe-level architectural gap. Moving from medium to $10$\,M
+improves both architectures, indicating the extra capacity captures
+additional author-discriminative signal. Note that at $10$\,M the
+perplexity ranking (Transformer better) and the probe ranking
+(xLSTM better) \emph{disagree} --- the same generation-vs-perplexity
+divergence already observed on CPU
+(Section~\ref{sec:gentext}).
+
+\paragraph{Downstream: IMDB-PT sentiment via in-pipeline MarianMT translation.}
+Section~\ref{sec:sentiment} used the pre-translated
+\texttt{celsowm/imdb-reviews-pt-br}. To remove dependence on a
+third-party translation and to obtain an end-to-end reproducible
+sentiment evaluation, we add an in-pipeline translation step: we
+download the original English IMDB
+dataset~\cite{maas2011imdb} and translate a balanced subset
+($1{,}000$ positive $+$ $1{,}000$ negative) from English to
+Brazilian Portuguese using
+\texttt{Helsinki-NLP/opus-mt-tc-big-en-pt}~\cite{tiedemann2020opus},
+the OPUS-MT public en$\rightarrow$pt MarianMT~\cite{junczys2018marian}
+checkpoint. OPUS-MT is the encoder--decoder Transformer family that
+was deployed in production neural translation immediately after
+GNMT and remains a strong public en$\rightarrow$pt baseline. The
+translation is sentence-by-sentence with greedy decoding; the
+resulting JSONL is then consumed by exactly the same probe protocol
+as Section~\ref{sec:sentiment} ($256$-token features,
+$80\%/20\%$ split, single \texttt{nn.Linear(D,2)}).
+Table~\ref{tab:sentiment-gpu} reports the metrics on the GPU
+$10$\,M checkpoints.
+
+\begin{table}[h]
+\centering
+\caption{Binary sentiment linear probe on MarianMT-translated
+  IMDB-PT ($2{,}000$ reviews balanced $50/50$, $256$-token features,
+  $80\%/20\%$ stratified split). Bold marks the higher value per
+  row. Majority-class baseline is $50\%$.}
+\label{tab:sentiment-gpu}
+\small
+\setlength{\tabcolsep}{6pt}
+\begin{tabular}{lrr}
+\toprule
+Metric & xLSTM $10$\,M & Transformer $10$\,M \\
+\midrule
+Test accuracy             & $\mathbf{64.00\%}$ & $63.25\%$ \\
+Test macro-F1             & $\mathbf{64.00\%}$ & $63.24\%$ \\
+Train accuracy (sanity)   & $75.06\%$          & $74.81\%$ \\
+Per-class F1 (negative)   & $\mathbf{63.82\%}$ & $62.60\%$ \\
+Per-class F1 (positive)   & $\mathbf{64.18\%}$ & $63.88\%$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The xLSTM leads by $0.75$ accuracy points and $0.76$ macro-F1
+points. The gap is well inside the seed-to-seed band measured for
+the Olist probe of Section~\ref{sec:olist} (where the two
+architectures landed within $1\sigma$ of each other on a comparable
+binary-sentiment task), so we read the result as \emph{statistical
+parity} on out-of-domain binary sentiment at $10$\,M, with a thin
+xLSTM lead. Combined with Table~\ref{tab:probe-gpu} and
+Table~\ref{tab:gpu-results}, the $10$\,M picture is:
+the Transformer reaches lower next-token perplexity ($6\%$ gap), but
+the xLSTM's representations match or marginally surpass the
+Transformer's on every downstream probe we measured, while training
+$\sim$$80\times$ slower in wall-clock terms. Figure~\ref{fig:downstream}
+summarises the downstream comparison visually. The in-pipeline
+MarianMT translation step is, by itself, a useful methodological
+addition: it lets us probe a domain (movie reviews) and a register
+(contemporary, informal, conversational) that are absent from any
+reasonably-sized Portuguese public-domain pretraining corpus,
+without taking the translation system as a black-box dependency.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.82\linewidth]{downstream_bars.png}
+\caption{Linear-probe test accuracy of the GPU checkpoints on three
+  tasks: $9$-author classification at medium and $10$\,M scales, and
+  binary IMDB-PT sentiment classification at the $10$\,M scale. Dashed
+  horizontal lines mark the majority-class baselines ($11.1\%$ for the
+  $9$-author task, $50\%$ for binary sentiment). The xLSTM leads on
+  all three tasks at the GPU scales considered, though the
+  IMDB-PT gap is well inside the seed-to-seed band measured for the
+  Olist probe of Section~\ref{sec:olist}.}
+\label{fig:downstream}
+\end{figure}
+
+\paragraph{Why the $10$\,M xLSTM overfits early.}
+At the corpus size used here ($\sim$$1.9$\,M unique tokens),
+increasing xLSTM capacity past $\sim$$6$\,M parameters yields
+diminishing held-out returns and eventually overfits within
+$\sim$$25$\,M training tokens (Figure~\ref{fig:gpu-scaling}). The
+Transformer $10$\,M run --- same parameter count, same data ---
+overfits much less aggressively over the same budget. We interpret
+this as consistent with the well-known empirical observation that
+architectures rich in inductive bias (gates, matrix memory,
+exponential gating with stabiliser state, GroupNorm head-wise) are
+more prone to memorisation than attention-only architectures at
+fixed corpus size, particularly when the token-to-parameter ratio is
+deep below
+Chinchilla-optimal~\cite{hoffmann2022}. A practical implication for
+the pipeline user is that the $10$\,M xLSTM configuration would
+benefit from either (i)~a smaller capacity given the corpus size,
+(ii)~stronger regularisation (dropout, larger weight decay), or
+(iii)~a substantially larger pretraining corpus; the CPU experiments
+of Section~\ref{sec:held-out-ppl} live in regime (iii)-from-below
+(under-trained) and the GPU $10$\,M xLSTM lives in regime
+(iii)-from-above (over-capacity for the corpus).
 
 \subsection{Qualitative inspection}
 
@@ -998,6 +1200,28 @@ challenge to Beck et al.\ but as a lower-bound case study extending the
 observed envelope of the effect downward. We make no claim about the
 asymptotic advantage at scale.
 
+\paragraph{The GPU sweep splits the perplexity and downstream signals.}
+The GPU sweep of Section~\ref{sec:gpu-scaling} extends the case study
+to $10$\,M parameters and a larger training budget, and surfaces a
+qualitatively new pattern: at $10$\,M, the Transformer regains the lead
+on held-out perplexity ($269$ vs.\ $287$, a $6\%$ gap) yet \emph{loses}
+on both downstream probes we measure (author classification by
+$2.2$ accuracy points, IMDB-PT sentiment by $0.8$). The xLSTM $10$\,M
+checkpoint also overfits the corpus much earlier than the Transformer
+$10$\,M checkpoint (best step $1{,}600$ vs.\ $4{,}400$ of $8{,}000$),
+which suggests the xLSTM is more data-hungry at this scale --- consistent
+with the inductive-bias argument made for the tiny-scale result above,
+now playing out in the opposite regime (capacity exceeding effective
+corpus entropy rather than corpus exceeding learnable capacity). The
+practical takeaway for a reader picking an architecture at this scale
+is that perplexity alone does not arbitrate: a model with a lower next-token
+loss may not produce more linearly-separable representations for
+downstream tasks. The Olist multi-seed result of
+Section~\ref{sec:olist} additionally warns that the IMDB-PT gap is
+within the seed-to-seed band of a similar binary-sentiment task, so the
+two architectures are best read as at statistical parity on out-of-domain
+sentiment, with the xLSTM holding a thin lead.
+
 \paragraph{Scope of the comparison.}
 The matched-LR design (peak $3 \times 10^{-4}$ for both architectures)
 prioritises symmetry over per-architecture tuning. The original xLSTM
@@ -1016,10 +1240,15 @@ makes the explicit scope of the reported numbers concrete.
 \section{Limitations and Future Work}\label{sec:limitations}
 
 \paragraph{Single seed per configuration.}
-The numbers in Table~\ref{tab:results} are from one training run per
-configuration. The $2.5\%$ medium-scale gap is within the seed-variance
-band typical of small-scale language modelling, so the medium-scale
-ranking is reported as ordinal rather than as a precise effect size.
+The CPU numbers of Table~\ref{tab:results} and the GPU numbers of
+Table~\ref{tab:gpu-results} are each from one training run per
+configuration. The single-digit-percent perplexity gaps at medium and
+$10$\,M scales are within the seed-variance band typical of small-scale
+language modelling. The Olist multi-seed downstream probe of
+Section~\ref{sec:olist} ($\pm 1\%$ accuracy between seeds on the same
+checkpoint) is the only measurement in this paper with empirical error
+bars; the other tables should be read as point estimates and their
+rankings as ordinal rather than as precise effect sizes.
 
 \paragraph{Domain.}
 The corpus is restricted to 19th-century Portuguese-language literature.
@@ -1040,29 +1269,41 @@ is not achieved.
 We have presented an open-source pipeline that isolates architecture as
 the sole variable in small-scale language modelling experiments. As an
 illustrative case study, we have applied the pipeline to xLSTM and a
-GPT-style Transformer at two parameter scales using a corpus of
-19th-century Portuguese literature, and observed a crossover effect in
-held-out perplexity: the Transformer wins at the smallest scale, and the
-xLSTM marginally surpasses the Transformer at the medium scale. The
-direction of this crossover is consistent with the
-scale-dependent-advantage hypothesis advanced by Beck et
-al.~\cite{beck2024}, with the additional empirical observation that the
-inversion is already present at $\sim$4.5\,M parameters --- two orders
-of magnitude below the smallest scale at which the original work
-documents the effect. We additionally highlight a methodological
-subtlety that is rarely controlled in published arch-comparison work:
-training throughput differences between recurrent and attention-based
-architectures in our setting span an order of magnitude due to backend
-implementation rather than fundamental architectural cost.
+GPT-style Transformer at five parameter scales across two hardware
+regimes, using a corpus of 19th-century Portuguese literature. On the
+CPU sweep we observed a crossover in held-out perplexity --- the
+Transformer wins at the smallest scale, the xLSTM marginally surpasses
+the Transformer at the medium scale --- whose direction is consistent
+with the scale-dependent-advantage hypothesis of Beck et
+al.~\cite{beck2024}, with the additional empirical observation that
+the inversion is already present at $\sim$$4.5$\,M parameters, two
+orders of magnitude below the smallest scale at which the original
+work documents the effect. The GPU sweep extends the picture: the
+Transformer regains the lead in held-out perplexity at $10$\,M
+parameters ($269$ vs.\ $287$, a $6\%$ gap), but the xLSTM overfits
+markedly earlier than the Transformer in this regime, and on every
+downstream probe we measured (author classification, IMDB-PT
+sentiment, Olist review-score) the xLSTM matches or marginally
+surpasses the Transformer at every scale considered. Taken together,
+the cross-architecture ordering depends on the metric: perplexity
+favours the Transformer at the largest scale, downstream probes favour
+the xLSTM, and these two answers should be read together rather than
+arbitrated. We additionally highlight a methodological subtlety that is
+rarely controlled in published arch-comparison work: training
+throughput differences between recurrent and attention-based
+architectures in our setting span $\sim$$5$--$8\times$ on CPU and
+$\sim$$45$--$80\times$ on GPU due to backend implementation rather than
+fundamental architectural cost.
 
 % =============================================================================
 \section*{Code and Data Availability}
 
-The full pipeline, including all configuration files, training scripts,
-analysis scripts, and the four trained checkpoints from this study, is
-available at: \url{https://github.com/Joao-pedrosantos/NaturalLanguageProcessing}.
-All training data is publicly available from Project
-Gutenberg under public-domain or non-restrictive licenses.
+The full pipeline, including all configuration files, training
+scripts, analysis scripts, and the trained checkpoints from this study,
+is available at\\
+\url{https://github.com/Joao-pedrosantos/NaturalLanguageProcessing}.
+All training data is publicly available from Project Gutenberg under
+public-domain or non-restrictive licenses.
 
 % =============================================================================
 \begin{thebibliography}{9}
@@ -1115,6 +1356,23 @@ Hugging Face.
 research and production.
 GitHub repository.
 \url{https://github.com/huggingface/tokenizers}.
+
+\bibitem{tiedemann2020opus}
+Tiedemann, J. \& Thottingal, S.
+OPUS-MT --- building open translation services for the world.
+\emph{Proceedings of the 22nd Annual Conference of the European
+Association for Machine Translation (EAMT)} (2020).
+
+\bibitem{junczys2018marian}
+Junczys-Dowmunt, M. \emph{et al.}
+Marian: Fast neural machine translation in C++.
+\emph{Proceedings of ACL 2018, System Demonstrations} (2018).
+
+\bibitem{dao2022flashattention}
+Dao, T., Fu, D.~Y., Ermon, S., Rudra, A. \& Ré, C.
+FlashAttention: Fast and memory-efficient exact attention with
+IO-awareness.
+\emph{Advances in Neural Information Processing Systems 35} (2022).
 
 \end{thebibliography}
 
