@@ -1,26 +1,21 @@
 # xLSTM-PTBR-EN
 
 Pré-treino de um xLSTM em texto multilíngue, com fine-tuning downstream.
-Projeto final da cadeira de NLP.
 
 ## Modos de uso
 
 - **POC** (`configs/*_tiny.yaml`): ~1.5M params, livros locais, ~10-15 min CPU.
 - **Medium** (`configs/*_medium.yaml`): ~4.5M params, livros locais, ~20 min CPU.
-  Os números do paper saem desses runs.
 - **Large** (`configs/*_large.yaml`): ~12-29M params, livros locais, **GPU**,
   algumas horas. Roda via `bash scripts/run_desktop.sh`. Veja seção
   *Desktop GPU run* abaixo.
-- **Treino real** (`configs/*_50m.yaml`): ~50M params, Wikipedia PT+EN
-  streaming, 24-36h na RTX 5080. Não usado no paper atual.
-
+  
 ## Desktop GPU run (tiny + medium + 10M + large, ambas as arquiteturas)
 
 ### Pré-requisitos
 
-- Driver NVIDIA $\ge$ 560, CUDA 12.8 (RTX 5080 / Blackwell exige isso).
+- Driver NVIDIA $\ge$ 560, CUDA 12.8.
 - Python 3.10+.
-- (Windows) Git for Windows instalado, pra ter `bash` disponível via Git Bash.
 
 ### Quickstart no desktop
 
@@ -72,7 +67,6 @@ pip install -e .
 7. Limpa logs concatenados (caso algum run tenha sido retomado).
 8. Regenera `scaling_curve.png` com os 8 runs e copia pra raiz pro `pdflatex` consumir.
 
-Tempo estimado total na RTX 5080: ~6–10h. O runner é reentrante — re-executar resume do último checkpoint.
 
 ### Etapas à mão (se precisar rodar isolado)
 
@@ -108,15 +102,6 @@ python -m scripts.train_tokenizer --vocab-size 32000
 python -m scripts.prepare_eval_set --target-mb 5
 python -m scripts.train --config configs/train_100m.yaml
 python -m scripts.train --config configs/train_100m_transformer.yaml
-```
-
-Tempo estimado: ~12–18h cada na RTX 5080 (Chinchilla-optimal de ~2B tokens).
-
-### Conversar com um modelo treinado
-
-```bash
-python -m scripts.chat --ckpt runs/xlstm_10m/best.pt --config configs/xlstm_10m.yaml --arch xlstm
-python -m scripts.chat --ckpt runs/transformer_10m/best.pt --config configs/transformer_10m.yaml --arch transformer
 ```
 
 ---
@@ -226,9 +211,6 @@ python -m scripts.prepare_eval_set --target-mb 5
 python -m scripts.count_params --config configs/xlstm_50m.yaml
 python -m scripts.train --config configs/train_50m.yaml
 ```
-
-Pode trocar `backend: vanilla` por `backend: cuda` em
-`configs/xlstm_50m.yaml` na 5080 — vai ser muito mais rápido.
 
 ---
 
