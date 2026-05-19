@@ -23,6 +23,11 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import LambdaLR
 
 
+def _unwrap(model: nn.Module) -> nn.Module:
+    """Retorna o módulo interno, removendo o wrapper DDP se presente."""
+    return model.module if hasattr(model, "module") else model
+
+
 def _autocast_ctx(device: torch.device, dtype: torch.dtype):
     """Retorna context manager: autocast quando faz sentido, no-op caso contrário.
 
@@ -136,7 +141,7 @@ def save_checkpoint(
     path.parent.mkdir(parents=True, exist_ok=True)
     torch.save(
         {
-            "model": model.state_dict(),
+            "model": _unwrap(model).state_dict(),
             "optimizer": optimizer.state_dict(),
             "scheduler": scheduler.state_dict(),
             "step": step,
@@ -192,6 +197,7 @@ def train(
     eval_fns: Optional[dict[str, Callable[[], dict]]] = None,
     out_dir: Path = Path("runs/default"),
     resume_state: Optional[TrainState] = None,
+    rank: int = 0,
 ) -> TrainState:
     """Main training loop.
 
@@ -207,7 +213,9 @@ def train(
     out_dir : where checkpoints and log.jsonl are written.
     resume_state : to continue a run, pass the TrainState loaded from ckpt.
     """
-    out_dir.mkdir(parents=True, exist_ok=True)
+    is_main = rank == 0
+    if is_main:
+        out_dir.mkdir(parents=True, exist_ok=True)
     log_path = out_dir / "log.jsonl"
 
     # --- optim / schedule ---
@@ -306,18 +314,19 @@ def train(
                     "tokens_seen": state.tokens_seen,
                     "wall_s": now - state.start_time,
                 }
-                print(
-                    f"step {state.step:6d} | loss {loss_accum:.4f} | "
-                    f"ppl {record['ppl']:8.2f} | lr {lr:.2e} | "
-                    f"{tok_per_s/1000:.1f}k tok/s"
-                )
-                with log_path.open("a") as f:
-                    f.write(json.dumps(record) + "\n")
+                if is_main:
+                    print(
+                        f"step {state.step:6d} | loss {loss_accum:.4f} | "
+                        f"ppl {record['ppl']:8.2f} | lr {lr:.2e} | "
+                        f"{tok_per_s/1000:.1f}k tok/s"
+                    )
+                    with log_path.open("a") as f:
+                        f.write(json.dumps(record) + "\n")
                 t_last_log = now
                 tokens_since_log = 0
 
-            # ---- eval ----
-            if eval_fns and state.step % eval_every == 0:
+            # ---- eval ---- (só rank 0 em DDP)
+            if eval_fns and is_main and state.step % eval_every == 0:
                 metrics = {}
                 for name, fn in eval_fns.items():
                     m = fn()
@@ -344,8 +353,8 @@ def train(
                     )
                     print(f"  new best: {state.best_val:.4f} -> best.pt")
 
-            # ---- save ----
-            if state.step % save_every == 0:
+            # ---- save ---- (só rank 0)
+            if is_main and state.step % save_every == 0:
                 ckpt_path = out_dir / f"step_{state.step}.pt"
                 save_checkpoint(
                     ckpt_path, model, optimizer, scheduler,
@@ -355,9 +364,10 @@ def train(
 
             loss_accum = 0.0
 
-    # final save
-    save_checkpoint(
-        out_dir / "final.pt", model, optimizer, scheduler,
-        state.step, state.best_val,
-    )
+    # final save (só rank 0)
+    if is_main:
+        save_checkpoint(
+            out_dir / "final.pt", model, optimizer, scheduler,
+            state.step, state.best_val,
+        )
     return state
